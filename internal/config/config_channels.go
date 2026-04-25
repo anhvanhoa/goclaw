@@ -157,11 +157,12 @@ type ZaloConfig struct {
 // ZaloOAConfig configures the phone-number-tied Official Account
 // channel that uses Zalo OAuth v4 (oauth.zaloapp.com). Distinct from
 // ZaloConfig (static-token Bot OA) and ZaloPersonalConfig (QR personal).
+//
+// AppID, SecretKey, and OAID are NOT here — those credentials live in
+// ChannelInstance.credentials (encrypted JSON blob) and are loaded via
+// LoadCreds. This struct only carries operator-tunable runtime knobs.
 type ZaloOAConfig struct {
 	Enabled              bool                `json:"enabled"`
-	AppID                string              `json:"app_id"`
-	SecretKey            string              `json:"secret_key"` // env-overridable; never log
-	OAID                 string              `json:"oa_id"`
 	PollIntervalSeconds  int                 `json:"poll_interval_seconds,omitempty"`  // default 15
 	RefreshMarginSeconds int                 `json:"refresh_margin_seconds,omitempty"` // default 300
 	SafetyTickerMinutes  int                 `json:"safety_ticker_minutes,omitempty"`  // default 30

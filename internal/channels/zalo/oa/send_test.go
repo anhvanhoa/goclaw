@@ -121,10 +121,7 @@ func newSendChannel(t *testing.T, apiSrv, refreshSrv *httptest.Server, fs *fakeS
 		RefreshToken: "RT-current",
 		ExpiresAt:    time.Now().Add(time.Hour),
 	}
-	cfg := config.ZaloOAConfig{
-		AppID:     "app",
-		SecretKey: "key",
-	}
+	cfg := config.ZaloOAConfig{}
 	msgBus := bus.New()
 	c, err := New("send_test", cfg, creds, fs, msgBus, nil)
 	if err != nil {

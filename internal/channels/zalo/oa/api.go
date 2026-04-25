@@ -158,9 +158,10 @@ func (c *Client) apiPostMultipart(ctx context.Context, path string, fileFieldNam
 		return nil, fmt.Errorf("close multipart: %w", err)
 	}
 
-	// Use a per-request client with the longer upload timeout instead of
-	// mutating the shared client.
-	uploadClient := &http.Client{Timeout: uploadTimeout}
+	// Per-request client with a longer timeout for uploads, but reuse the
+	// shared Transport so HTTPS_PROXY / keep-alive tuning configured in
+	// NewClient still apply.
+	uploadClient := &http.Client{Timeout: uploadTimeout, Transport: c.http.Transport}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiBase+path, &buf)
 	if err != nil {
 		return nil, fmt.Errorf("build upload request %s: %w", path, err)
@@ -240,7 +241,10 @@ func (c *Client) postForm(ctx context.Context, fullURL string, headers map[strin
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 	if traceEnabled {
-		slog.Debug("zalo_oa.raw_response", "path", "oauth_token", "status", resp.StatusCode, "body", string(raw))
+		// Body intentionally omitted — successful OAuth responses contain
+		// access_token + refresh_token in plaintext; logging them risks
+		// credentials landing in a log aggregator. Status code only.
+		slog.Debug("zalo_oa.raw_response", "path", "oauth_token", "status", resp.StatusCode)
 	}
 
 	if resp.StatusCode >= 400 {

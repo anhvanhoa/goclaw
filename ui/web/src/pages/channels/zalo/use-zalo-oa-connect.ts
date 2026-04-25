@@ -141,12 +141,11 @@ export function useZaloOAConnect(
 
   async function handleSubmit() {
     if (!code.trim() || !state) return;
-    const { code: finalCode, oaID, mismatchedState } = extractCode(code.trim(), state);
-    if (mismatchedState) {
-      // Ignore — server still validates state. Surfacing as an explicit
-      // error would confuse operators on legit flows where Zalo mangles the
-      // redirect but still returns a valid code.
-    }
+    // mismatchedState is intentionally ignored client-side: the server
+    // re-validates state on exchange_code, and surfacing it here confuses
+    // operators on legit flows where Zalo mangles the redirect but still
+    // returns a valid code.
+    const { code: finalCode, oaID } = extractCode(code.trim(), state);
     try {
       const params: Record<string, unknown> = {
         instance_id: instanceId,

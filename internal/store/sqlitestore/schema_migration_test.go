@@ -155,6 +155,78 @@ func TestSQLiteSchemaUpgrade_23_to_24(t *testing.T) {
 	}
 }
 
+// TestSQLiteSchemaUpgrade_25_to_26 verifies the v25→26 migration swaps
+// zalo_oauth → zalo_oa and zalo_oa → zalo_bot via the zalo_oa_tmp sentinel
+// without losing rows or affecting unrelated channel types.
+func TestSQLiteSchemaUpgrade_25_to_26(t *testing.T) {
+	db := openTestDBAtVersion(t, 25)
+
+	// Seed FK parents: tenant + agent.
+	tenantID := "00000000-0000-0000-0000-000000000001"
+	agentID := "00000000-0000-0000-0000-000000000002"
+	if _, err := db.Exec(`INSERT INTO tenants (id, name, slug, status) VALUES (?, 'T', 't', 'active')`, tenantID); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO agents (id, agent_key, display_name, status, tenant_id, owner_id, model, provider)
+		VALUES (?, 'agt', 'A', 'active', ?, 'owner', 'gpt-4o', 'openai')`, agentID, tenantID); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+
+	// Seed three channel rows: one zalo_oauth (→ zalo_oa), one zalo_oa
+	// (→ zalo_bot), one telegram (control — must remain unchanged).
+	rows := []struct {
+		id          string
+		name        string
+		channelType string
+	}{
+		{"ci-oauth", "old-oauth", "zalo_oauth"},
+		{"ci-oa", "old-oa", "zalo_oa"},
+		{"ci-tg", "tg-control", "telegram"},
+	}
+	for _, r := range rows {
+		if _, err := db.Exec(`INSERT INTO channel_instances (id, name, channel_type, agent_id, tenant_id)
+			VALUES (?, ?, ?, ?, ?)`, r.id, r.name, r.channelType, agentID, tenantID); err != nil {
+			t.Fatalf("seed %s: %v", r.id, err)
+		}
+	}
+
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema (v25→26) failed: %v", err)
+	}
+
+	var version int
+	if err := db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&version); err != nil {
+		t.Fatalf("read version: %v", err)
+	}
+	if version != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", version, SchemaVersion)
+	}
+
+	// Verify the swap.
+	want := map[string]string{
+		"ci-oauth": "zalo_oa",  // zalo_oauth → zalo_oa
+		"ci-oa":    "zalo_bot", // zalo_oa    → zalo_bot
+		"ci-tg":    "telegram", // unrelated  unchanged
+	}
+	for id, expected := range want {
+		var got string
+		if err := db.QueryRow(`SELECT channel_type FROM channel_instances WHERE id = ?`, id).Scan(&got); err != nil {
+			t.Errorf("read %s: %v", id, err)
+			continue
+		}
+		if got != expected {
+			t.Errorf("%s: channel_type = %q, want %q", id, got, expected)
+		}
+	}
+
+	// Sentinel must not leak.
+	var tmpCount int
+	db.QueryRow(`SELECT COUNT(*) FROM channel_instances WHERE channel_type = 'zalo_oa_tmp'`).Scan(&tmpCount)
+	if tmpCount != 0 {
+		t.Errorf("zalo_oa_tmp sentinel leaked: %d rows", tmpCount)
+	}
+}
+
 // TestSQLiteVaultStore_UpsertTriggerEnforcesCheck verifies the v24 triggers
 // fire on both the INSERT path and the UPDATE path (UPSERT ON CONFLICT).
 func TestSQLiteVaultStore_UpsertTriggerEnforcesCheck(t *testing.T) {
