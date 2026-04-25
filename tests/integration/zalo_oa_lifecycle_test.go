@@ -206,7 +206,9 @@ func newMockZaloServer(t *testing.T) *mockZaloServer {
 // Override points the channel's HTTP client at the mock for both the OAuth
 // host and the API host. Uses test-only setters added on the Channel.
 func (m *mockZaloServer) Override(ch *zalooa.Channel) {
-	ch.SetTestEndpointsForTest(m.srv.URL, m.srv.URL)
+	// OAuth base carries /v4 in production (defaultOAuthBase); mirror it here
+	// so refresh URLs end at /v4/oa/access_token like the real upstream.
+	ch.SetTestEndpointsForTest(m.srv.URL+"/v4", m.srv.URL)
 }
 
 func (m *mockZaloServer) QueueRefreshOK(access, refresh string) {
@@ -254,7 +256,7 @@ func (m *mockZaloServer) handle(w http.ResponseWriter, r *http.Request) {
 		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":0,"data":{"message_id":"int-mid"}}`))
-	case strings.HasPrefix(r.URL.Path, "/v3.0/oa/listrecentchat"):
+	case strings.HasPrefix(r.URL.Path, "/v2.0/oa/listrecentchat"):
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":0,"data":[]}`)) // no inbound traffic this test
 	default:
