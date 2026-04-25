@@ -155,6 +155,10 @@ func (c *Channel) post(ctx context.Context, path string, body any) (string, erro
 	for attempt := 0; attempt < 2; attempt++ {
 		tok, err := c.tokens.Access(ctx)
 		if err != nil {
+			// Token refresh died (refresh-token expired, etc.) — surface to
+			// health so operators see the reauth prompt immediately instead
+			// of waiting for the 30-min safety ticker.
+			c.markAuthFailedIfNeeded(err)
 			return "", err
 		}
 		raw, err := c.client.apiPost(ctx, path, body, tok)
@@ -166,6 +170,9 @@ func (c *Channel) post(ctx context.Context, path string, body any) (string, erro
 			c.tokens.ForceRefresh()
 			continue
 		}
+		// Non-retryable error after the retry-once-on-auth attempt; if it's
+		// still an auth failure here, the OA-app association is broken.
+		c.markAuthFailedIfNeeded(err)
 		return "", err
 	}
 	// Unreachable — second iteration always returns. Defensive panic so a

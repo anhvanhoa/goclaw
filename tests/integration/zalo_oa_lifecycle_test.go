@@ -252,7 +252,9 @@ func (m *mockZaloServer) handle(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/v3.0/oa/message/cs":
 		m.sendCount.Add(1)
 		m.mu.Lock()
-		m.lastSendToken = r.URL.Query().Get("access_token")
+		// Production sends access_token in the HTTP header, not query
+		// (per d580d490 — Zalo's query-token form returned a generic 404).
+		m.lastSendToken = r.Header.Get("access_token")
 		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":0,"data":{"message_id":"int-mid"}}`))
