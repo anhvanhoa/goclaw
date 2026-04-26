@@ -177,6 +177,10 @@ type ZaloOAConfig struct {
 	WebhookSignatureMode       string `json:"webhook_signature_mode,omitempty"`        // "strict" (default) | "log_only" | "disabled"
 	WebhookReplayWindowSeconds int    `json:"webhook_replay_window_seconds,omitempty"` // default 300, clamp [60, 3600]
 	CatchUpOnRestart           bool   `json:"catch_up_on_restart,omitempty"`           // single bounded listrecentchat sweep on Start (off by default)
+
+	// Polling-window resilience (phase 06). Ignored when Transport="webhook".
+	PollCount            int `json:"poll_count,omitempty"`              // listrecentchat page size; default 50, clamp [10, 200]
+	PollBurndownMaxPages int `json:"poll_burndown_max_pages,omitempty"` // max pages per cycle; default 5, clamp [1, 20]; 1 disables burn-down
 }
 
 type ZaloPersonalConfig struct {
