@@ -336,9 +336,9 @@ func TestSend_PlainTextGoesThroughSendMessage(t *testing.T) {
 	}
 }
 
-// TestSend_PhotoExtractionRoutesToSendPhoto verifies [photo:URL] is
-// extracted and sent via sendPhoto instead of sendMessage.
-func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
+// TestSend_MediaHTTPURLRoutesToSendPhoto verifies a Media[] entry with an
+// http(s) URL routes to the sendPhoto endpoint with merged caption.
+func TestSend_MediaHTTPURLRoutesToSendPhoto(t *testing.T) {
 	var lastPath string
 	var lastBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +353,11 @@ func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
 	ch := newTestChannel(t, srv.URL)
 	err := ch.Send(context.Background(), bus.OutboundMessage{
 		ChatID:  "user-8",
-		Content: "look at this [photo:https://cdn.example/test.jpg] nice pic",
+		Content: "nice pic",
+		Media: []bus.MediaAttachment{{
+			URL:     "https://cdn.example/test.jpg",
+			Caption: "look at this",
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -363,6 +367,59 @@ func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
 	}
 	if lastBody["photo"] != "https://cdn.example/test.jpg" {
 		t.Errorf("photo = %v", lastBody["photo"])
+	}
+	if got := lastBody["caption"]; got != "look at this\n\nnice pic" {
+		t.Errorf("caption = %q, want merged caption+content", got)
+	}
+}
+
+// TestSend_MediaLocalPathRejected verifies the bot rejects local-path media
+// with an actionable error directing operators to the zalo_oa channel.
+func TestSend_MediaLocalPathRejected(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "user-9",
+		Content: "with caption",
+		Media:   []bus.MediaAttachment{{URL: "/tmp/local.jpg"}},
+	})
+	if err == nil {
+		t.Fatalf("Send: want error for local-path media, got nil")
+	}
+	if !strings.Contains(err.Error(), "local file media not supported") {
+		t.Errorf("err = %v, want local-path rejection", err)
+	}
+	if called {
+		t.Error("API was called despite local-path rejection")
+	}
+}
+
+// TestSend_NoMediaRoutesToText verifies the absence of Media[] routes to the
+// text-chunking path (sendMessage), preserving back-compat for plain text.
+func TestSend_NoMediaRoutesToText(t *testing.T) {
+	var lastPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "user-10",
+		Content: "plain message",
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !strings.HasSuffix(lastPath, "/sendMessage") {
+		t.Errorf("path = %q, want sendMessage", lastPath)
 	}
 }
 

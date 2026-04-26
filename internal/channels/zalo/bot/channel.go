@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -37,6 +38,10 @@ type Channel struct {
 	client     *http.Client
 	pollClient *http.Client
 	// pairingService, pairingDebounce are inherited from channels.BaseChannel.
+
+	// legacyPhotoSentinelWarn fires once-per-process if any caller still
+	// emits the deprecated [photo:URL] sentinel after the Media[] migration.
+	legacyPhotoSentinelWarn sync.Once
 }
 
 // New creates a new Zalo channel.
@@ -110,20 +115,52 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	// Strip markdown — Zalo does not support any markup rendering.
 	msg.Content = StripMarkdown(msg.Content)
 
-	// Check for media in content (URL-based photo sending)
+	// Defensive: warn if any caller still emits the legacy [photo:URL] sentinel
+	// after the migration. Logged once per process to avoid log spam.
 	if strings.Contains(msg.Content, "[photo:") {
-		// Extract photo URL from "[photo:URL]" pattern
-		if start := strings.Index(msg.Content, "[photo:"); start >= 0 {
-			end := strings.Index(msg.Content[start:], "]")
-			if end > 0 {
-				photoURL := msg.Content[start+7 : start+end]
-				caption := strings.TrimSpace(msg.Content[:start] + msg.Content[start+end+1:])
-				return c.sendPhoto(msg.ChatID, photoURL, caption)
-			}
-		}
+		c.legacyPhotoSentinelWarn.Do(func() {
+			slog.Warn("zalo_bot.send.legacy_photo_sentinel_detected",
+				"chat_id", msg.ChatID,
+				"hint", "switch caller to bus.OutboundMessage.Media[]")
+		})
 	}
 
-	// Send as text, chunking if over 2000 chars
-	return c.sendChunkedText(msg.ChatID, msg.Content)
+	if len(msg.Media) == 0 {
+		return c.sendChunkedText(msg.ChatID, msg.Content)
+	}
+	if len(msg.Media) > 1 {
+		slog.Info("zalo_bot.send.extra_media_skipped",
+			"chat_id", msg.ChatID, "extra", len(msg.Media)-1)
+	}
+
+	m := msg.Media[0]
+	if !isHTTPURL(m.URL) {
+		return fmt.Errorf("zalo_bot: local file media not supported; use zalo_oa channel (got %q)", m.URL)
+	}
+	caption := mergeTrailingText(m.Caption, msg.Content)
+	return c.sendPhoto(msg.ChatID, m.URL, caption)
+}
+
+// isHTTPURL reports whether u is an http or https URL. Bot's sendPhoto API
+// only accepts remote URLs; local paths must be rejected.
+func isHTTPURL(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
+// mergeTrailingText joins caption + content with a blank line. Mirrors
+// zalo/oa's mergeTrailingText so users see consistent layout across channels.
+func mergeTrailingText(caption, content string) string {
+	caption = strings.TrimSpace(caption)
+	content = strings.TrimSpace(content)
+	switch {
+	case caption == "" && content == "":
+		return ""
+	case caption == "":
+		return content
+	case content == "":
+		return caption
+	default:
+		return caption + "\n\n" + content
+	}
 }
 
