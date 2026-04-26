@@ -75,28 +75,63 @@ func (c *Channel) listRecentChat(ctx context.Context, offset, count int) ([]mess
 // (from_id == oa_id), dedup per-user by last-seen timestamp, and
 // dispatch via BaseChannel.HandleMessage.
 //
-// v1 limitation: the listrecentchat window is bounded by `count`
-// (default 10). High-volume OAs can have messages rotate off the
-// window between polls. Webhook upgrade (v2) is the structural fix.
+// Phase 06: burn-down loop pages through listrecentchat until a partial
+// page (caught up) or maxPages cap (warn). Default 50 × 5 = 250 msg/cycle
+// vs the prior hardcoded 10 — ~25× headroom for bursty OAs.
 func (c *Channel) pollOnce(ctx context.Context) error {
 	if c.skipPollIfAuthFailed() {
 		return nil
 	}
 
-	msgs, err := c.listRecentChat(ctx, 0, listRecentChatCount)
-	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) && apiErr.isAuth() {
-			slog.Warn("zalo_oa.poll.token_rejected_forcing_refresh",
-				"oa_id", c.creds.OAID, "zalo_code", apiErr.Code, "zalo_msg", apiErr.Message)
-			c.tokens.ForceRefresh()
-			msgs, err = c.listRecentChat(ctx, 0, listRecentChatCount)
-		}
+	pageSize := pollCountFromCfg(c.cfg.PollCount)
+	maxPages := pollBurndownMaxPagesFromCfg(c.cfg.PollBurndownMaxPages)
+
+	for page := 0; page < maxPages; page++ {
+		offset := page * pageSize
+		msgs, err := c.listRecentChatRetryAuth(ctx, offset, pageSize)
 		if err != nil {
 			return err
 		}
+		if len(msgs) == 0 {
+			break
+		}
+		c.processMessages(msgs)
+		if len(msgs) < pageSize {
+			break // partial page — caught up
+		}
+		if page == maxPages-1 {
+			slog.Warn("zalo_oa.poll.burndown_capped",
+				"oa_id", c.creds.OAID,
+				"max_pages", maxPages,
+				"page_size", pageSize,
+				"hint", "raise poll_count or shorten poll_interval_seconds if this is steady-state")
+		}
 	}
+	return nil
+}
 
+// listRecentChatRetryAuth wraps listRecentChat with a single retry-on-auth-
+// failure that forces a token refresh. Extracted from pollOnce so each
+// burn-down page can retry independently.
+func (c *Channel) listRecentChatRetryAuth(ctx context.Context, offset, count int) ([]message, error) {
+	msgs, err := c.listRecentChat(ctx, offset, count)
+	if err == nil {
+		return msgs, nil
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.isAuth() {
+		slog.Warn("zalo_oa.poll.token_rejected_forcing_refresh",
+			"oa_id", c.creds.OAID, "zalo_code", apiErr.Code, "zalo_msg", apiErr.Message)
+		c.tokens.ForceRefresh()
+		return c.listRecentChat(ctx, offset, count)
+	}
+	return nil, err
+}
+
+// processMessages iterates a single page oldest-first, filters OA echoes
+// + malformed rows, dedups via (cursor, seenIDs), and dispatches each
+// surviving message through BaseChannel.HandleMessage.
+func (c *Channel) processMessages(msgs []message) {
 	// Process oldest-first so the cursor advances monotonically.
 	sort.SliceStable(msgs, func(i, j int) bool { return msgs[i].Time < msgs[j].Time })
 
@@ -128,7 +163,6 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 			c.cursor.Advance(m.FromID, m.Time)
 		}
 	}
-	return nil
 }
 
 // dispatchInbound maps a Zalo message into a BaseChannel.HandleMessage call.
@@ -159,10 +193,15 @@ func (c *Channel) skipPollIfAuthFailed() bool {
 }
 
 const (
-	listRecentChatCount = 10
 	defaultPollInterval = 15 * time.Second
 	rateLimitBackoff    = 30 * time.Second
 	cursorFlushInterval = 60 * time.Second
+
+	defaultPollCount            = 50
+	pollCountFloor              = 10
+	pollCountCeil               = 200
+	defaultPollBurndownMaxPages = 5
+	pollBurndownMaxPagesCeil    = 20
 )
 
 // pollIntervalFromCfg clamps cfg.PollIntervalSeconds to the safe range.
@@ -174,5 +213,34 @@ func pollIntervalFromCfg(s int) time.Duration {
 		return 120 * time.Second
 	default:
 		return time.Duration(s) * time.Second
+	}
+}
+
+// pollCountFromCfg clamps cfg.PollCount to [pollCountFloor, pollCountCeil].
+// Zero/negative → defaultPollCount. Phase 06.
+func pollCountFromCfg(n int) int {
+	switch {
+	case n <= 0:
+		return defaultPollCount
+	case n < pollCountFloor:
+		return pollCountFloor
+	case n > pollCountCeil:
+		return pollCountCeil
+	default:
+		return n
+	}
+}
+
+// pollBurndownMaxPagesFromCfg clamps cfg.PollBurndownMaxPages to [1, 20].
+// Zero/negative → defaultPollBurndownMaxPages. 1 disables burn-down (single
+// page per cycle, mirrors pre-phase-06 behavior). Phase 06.
+func pollBurndownMaxPagesFromCfg(n int) int {
+	switch {
+	case n <= 0:
+		return defaultPollBurndownMaxPages
+	case n > pollBurndownMaxPagesCeil:
+		return pollBurndownMaxPagesCeil
+	default:
+		return n
 	}
 }

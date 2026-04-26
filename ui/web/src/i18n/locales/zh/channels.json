@@ -229,6 +229,8 @@
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
     "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
+    "poll_count": { "label": "轮询页大小", "help": "每个周期获取的消息数。默认 50，最小 10，最大 200。如果出现轮询滞后警告请调高。" },
+    "poll_burndown_max_pages": { "label": "Burn-down 最大页数", "help": "OA 突发流量时每个周期连续 listrecentchat 的最大页数。默认 5，最大 20。设为 1 可禁用 burn-down。" },
     "domain": { "label": "域名" },
     "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },

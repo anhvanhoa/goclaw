@@ -269,6 +269,14 @@
       "label": "Block Reply",
       "help": "Deliver intermediate text during tool iterations"
     },
+    "poll_count": {
+      "label": "Poll Page Size",
+      "help": "Messages fetched per cycle. Default 50, min 10, max 200. Raise if you see polling lag warnings."
+    },
+    "poll_burndown_max_pages": {
+      "label": "Burn-down Max Pages",
+      "help": "Max consecutive listrecentchat pages per cycle when the OA is bursting. Default 5, max 20. Set to 1 to disable burn-down."
+    },
     "domain": { "label": "Domain" },
     "connection_mode": {
       "label": "Connection Mode",

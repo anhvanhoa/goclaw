@@ -181,6 +181,8 @@ export const configSchema: Record<string, FieldDef[]> = {
   ],
   zalo_oa: [
     { key: "poll_interval_seconds", label: "Poll Interval (seconds)", type: "number", defaultValue: 15, help: "How often to fetch new messages. Min 5, max 120." },
+    { key: "poll_count", label: "Poll Page Size", type: "number", defaultValue: 50, help: "Messages fetched per cycle. Default 50, min 10, max 200. Raise if you see polling lag warnings." },
+    { key: "poll_burndown_max_pages", label: "Burn-down Max Pages", type: "number", defaultValue: 5, help: "Max consecutive listrecentchat pages per cycle when the OA is bursting. Default 5, max 20. Set to 1 to disable burn-down." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs (empty = allow all)" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
