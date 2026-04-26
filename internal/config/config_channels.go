@@ -173,6 +173,7 @@ type ZaloOAConfig struct {
 
 	// Webhook transport (phase 05). Polling is the default.
 	Transport                  string `json:"transport,omitempty"`                     // "polling" (default) | "webhook"
+	WebhookOASecretKey         string `json:"webhook_oa_secret_key,omitempty"`         // signing secret from Zalo dev console — DISTINCT from creds.SecretKey (S7)
 	WebhookSignatureMode       string `json:"webhook_signature_mode,omitempty"`        // "strict" (default) | "log_only" | "disabled"
 	WebhookReplayWindowSeconds int    `json:"webhook_replay_window_seconds,omitempty"` // default 300, clamp [60, 3600]
 	CatchUpOnRestart           bool   `json:"catch_up_on_restart,omitempty"`           // single bounded listrecentchat sweep on Start (off by default)

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,15 +26,31 @@ import (
 // path; we want a single-mount, multi-instance router.
 type Router struct {
 	mu          sync.RWMutex
-	instances   map[uuid.UUID]registeredInstance
+	instances   map[uuid.UUID]*registeredInstance
 	dedup       *Dedup
 	rateLimiter *channels.WebhookRateLimiter
 	maxBodySize int64
 }
 
+// emptyIDStreakWarnThreshold is the consecutive count of empty
+// ExtractMessageID() returns that triggers a single warn-level log. R3-2:
+// catches Zalo schema drift where the extractor silently disables dedup.
+const emptyIDStreakWarnThreshold = 10
+
 type registeredInstance struct {
 	handler  WebhookHandler
 	tenantID uuid.UUID
+
+	// ctx is the per-instance dispatch context; cancelled in
+	// UnregisterInstance so in-flight HandleWebhookEvent goroutines bail
+	// promptly during channel Stop (R3-3).
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// emptyIDStreak counts consecutive empty ExtractMessageID() returns.
+	// Reset on any non-empty extraction. Warn fires once per threshold
+	// crossing — see emptyIDStreakWarnThreshold (R3-2).
+	emptyIDStreak atomic.Int64
 }
 
 // WebhookHandler is the per-channel-instance contract the router invokes
@@ -74,7 +91,7 @@ const (
 // process-wide singleton).
 func NewRouter() *Router {
 	return &Router{
-		instances:   make(map[uuid.UUID]registeredInstance),
+		instances:   make(map[uuid.UUID]*registeredInstance),
 		dedup:       NewDedup(defaultDedupTTL, defaultDedupMax),
 		rateLimiter: channels.NewWebhookRateLimiter(),
 		maxBodySize: defaultMaxBodyBytes,
@@ -83,21 +100,35 @@ func NewRouter() *Router {
 
 // RegisterInstance enrolls a channel for routing. tenantID is captured
 // at register time for defense-in-depth scoping in downstream handlers.
+// The per-instance ctx is cancelled when UnregisterInstance runs so any
+// in-flight HandleWebhookEvent dispatch can observe cancellation (R3-3).
 func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.UUID) {
+	ctx, cancel := context.WithCancel(context.Background())
+	inst := &registeredInstance{
+		handler:  h,
+		tenantID: tenantID,
+		ctx:      ctx,
+		cancel:   cancel,
+	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.instances[id] = registeredInstance{handler: h, tenantID: tenantID}
+	r.instances[id] = inst
+	r.mu.Unlock()
 }
 
-// UnregisterInstance removes a channel from the routing table. Channel
-// Stop() must call this to avoid leaking entries across restarts.
+// UnregisterInstance removes a channel from the routing table and
+// cancels its dispatch context so in-flight handlers exit promptly.
+// Idempotent — calling on an unregistered ID is a no-op.
 func (r *Router) UnregisterInstance(id uuid.UUID) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	inst, ok := r.instances[id]
 	delete(r.instances, id)
+	r.mu.Unlock()
+	if ok && inst.cancel != nil {
+		inst.cancel()
+	}
 }
 
-func (r *Router) lookup(id uuid.UUID) (registeredInstance, bool) {
+func (r *Router) lookup(id uuid.UUID) (*registeredInstance, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	inst, ok := r.instances[id]
@@ -148,7 +179,21 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if mid := inst.handler.MessageIDExtractor().ExtractMessageID(body); mid != "" {
+	mid := inst.handler.MessageIDExtractor().ExtractMessageID(body)
+	if mid == "" {
+		// R3-2: increment streak; warn-and-reset at threshold so a silent
+		// schema drift (extractor returning "" for every event) doesn't go
+		// unnoticed. Reset-after-warn throttles to one warn per 10-event window.
+		n := inst.emptyIDStreak.Add(1)
+		if n >= emptyIDStreakWarnThreshold {
+			inst.emptyIDStreak.Store(0)
+			slog.Warn("zalo_webhook.empty_message_id_streak",
+				"count", n,
+				"instance_id", instanceID,
+				"hint", "extractor may need update for schema drift")
+		}
+	} else {
+		inst.emptyIDStreak.Store(0)
 		if r.dedup.SeenOrAdd(instanceID, mid) {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -161,11 +206,12 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // dispatch invokes the handler in a goroutine so the HTTP response is
 // not blocked by per-event work (Zalo expects ack within ~2s). Panics
-// inside the handler are caught by safego.Recover and logged.
-func (r *Router) dispatch(instanceID uuid.UUID, inst registeredInstance, body []byte) {
+// inside the handler are caught by safego.Recover and logged. The
+// per-instance ctx is cancelled by UnregisterInstance so a long-running
+// handler bails fast when the channel stops (R3-3).
+func (r *Router) dispatch(instanceID uuid.UUID, inst *registeredInstance, body []byte) {
 	defer safego.Recover(nil, "instance_id", instanceID, "tenant_id", inst.tenantID)
-	ctx := context.Background()
-	if err := inst.handler.HandleWebhookEvent(ctx, body); err != nil {
+	if err := inst.handler.HandleWebhookEvent(inst.ctx, body); err != nil {
 		slog.Error("zalo_webhook.handler_error",
 			"instance_id", instanceID,
 			"tenant_id", inst.tenantID,

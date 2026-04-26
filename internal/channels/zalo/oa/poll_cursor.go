@@ -78,6 +78,21 @@ func (c *pollCursor) Get(userID string) int64 {
 	return 0
 }
 
+// LastSeenTimestamp returns the maximum unix-ms timestamp across all
+// per-user entries (0 if empty). Used by the catch-up sweep to decide
+// whether the cursor is stale enough to warrant a recovery list call.
+func (c *pollCursor) LastSeenTimestamp() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var max int64
+	for _, elem := range c.data {
+		if ts := elem.Value.(*cursorEntry).ts; ts > max {
+			max = ts
+		}
+	}
+	return max
+}
+
 // Snapshot returns a copy of the cursor map. Safe to mutate; does not
 // affect the cursor.
 func (c *pollCursor) Snapshot() map[string]int64 {
