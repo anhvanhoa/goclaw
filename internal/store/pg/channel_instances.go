@@ -229,6 +229,41 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 	return execMapUpdateWhereTenant(ctx, s.db, "channel_instances", updates, id, tid)
 }
 
+// MergeConfig atomically merges `partial` into the config JSONB column at
+// SQL level using `||` (top-level shallow merge — keys in `partial`
+// overwrite, keys only in existing are preserved). Avoids the
+// read-modify-write race that the application-layer Update path has
+// when two writers touch the same blob concurrently.
+func (s *PGChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
+	if len(partial) == 0 {
+		return nil
+	}
+	patch, err := json.Marshal(partial)
+	if err != nil {
+		return fmt.Errorf("marshal config patch: %w", err)
+	}
+	if store.IsCrossTenant(ctx) {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE channel_instances
+			   SET config = COALESCE(config, '{}'::jsonb) || $1::jsonb,
+			       updated_at = $2
+			 WHERE id = $3`,
+			patch, time.Now(), id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for merge")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE channel_instances
+		   SET config = COALESCE(config, '{}'::jsonb) || $1::jsonb,
+		       updated_at = $2
+		 WHERE id = $3 AND tenant_id = $4`,
+		patch, time.Now(), id, tid)
+	return err
+}
+
 // loadExistingCreds reads and decrypts the current credentials for merging.
 func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
 	var raw []byte

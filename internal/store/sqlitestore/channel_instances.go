@@ -228,6 +228,43 @@ func (s *SQLiteChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, u
 	return execMapUpdateWhereTenant(ctx, s.db, "channel_instances", updates, id, tid)
 }
 
+// MergeConfig atomically applies a top-level shallow merge of `partial`
+// into the config column using SQLite's json_patch (RFC 7396 semantics).
+// Avoids the read-modify-write race that plagues a Get → mutate → Update
+// pattern when concurrent writers touch different keys in the same blob.
+//
+// Caveat: json_patch removes keys whose value is null in the patch. The
+// only consumer (poll cursor) writes int64 values, so this is fine.
+func (s *SQLiteChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
+	if len(partial) == 0 {
+		return nil
+	}
+	patch, err := json.Marshal(partial)
+	if err != nil {
+		return fmt.Errorf("marshal config patch: %w", err)
+	}
+	if store.IsCrossTenant(ctx) {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE channel_instances
+			   SET config = json_patch(COALESCE(config, '{}'), ?),
+			       updated_at = ?
+			 WHERE id = ?`,
+			string(patch), time.Now(), id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for merge")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE channel_instances
+		   SET config = json_patch(COALESCE(config, '{}'), ?),
+		       updated_at = ?
+		 WHERE id = ? AND tenant_id = ?`,
+		string(patch), time.Now(), id, tid)
+	return err
+}
+
 func (s *SQLiteChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
 	var raw []byte
 	err := s.db.QueryRowContext(ctx, "SELECT credentials FROM channel_instances WHERE id = ?", id).Scan(&raw)

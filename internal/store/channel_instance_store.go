@@ -49,6 +49,12 @@ type ChannelInstanceStore interface {
 	Get(ctx context.Context, id uuid.UUID) (*ChannelInstanceData, error)
 	GetByName(ctx context.Context, name string) (*ChannelInstanceData, error)
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
+	// MergeConfig applies a top-level JSONB merge of `partial` into the
+	// instance's config column atomically at the SQL layer. Existing keys
+	// not present in `partial` are preserved. Used by background workers
+	// (e.g. polling cursors) to avoid clobbering operator-set fields when
+	// they only own a single config sub-key.
+	MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListEnabled(ctx context.Context) ([]ChannelInstanceData, error)
 	ListAll(ctx context.Context) ([]ChannelInstanceData, error)
