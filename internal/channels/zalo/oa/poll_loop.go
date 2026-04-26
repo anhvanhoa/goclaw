@@ -15,8 +15,16 @@ import (
 // runs a polling cycle on each tick; on ErrRateLimit it switches to the
 // rate-limit ticker until a clean cycle returns. Cursor flushes are
 // debounced (60s by default) so we don't pummel the DB per-message.
+//
+// Belt-and-suspenders: if cfg.Transport=="webhook" we early-return so a
+// future regression that spawned this loop directly cannot run alongside
+// the webhook handler and double-dispatch.
 func (c *Channel) runPollLoop(parentCtx context.Context) {
 	defer c.pollWG.Done()
+	if c.cfg.Transport == "webhook" {
+		slog.Info("zalo_oa.poll.skipped_for_webhook_transport", "name", c.Name())
+		return
+	}
 
 	t := time.NewTicker(c.pollInterval)
 	defer t.Stop()

@@ -60,9 +60,10 @@ type Channel struct {
 	// or cfg.SafetyTickerMinutes.
 	safetyTickerInterval time.Duration
 
-	stopOnce sync.Once
-	stopCh   chan struct{}
-	tickerWG sync.WaitGroup
+	stopOnce   sync.Once
+	stopCh     chan struct{}
+	tickerWG   sync.WaitGroup
+	catchUpWG  sync.WaitGroup // tracks the optional webhook catch-up goroutine (N2)
 
 	// webhookRouter is the shared Zalo router for the gateway. Wired by
 	// FactoryWithRouter; nil for callers that still use the legacy Factory.
@@ -129,34 +130,63 @@ func (c *Channel) ForceRefreshForTest() {
 // Type returns the channel type identifier.
 func (c *Channel) Type() string { return channels.TypeZaloOA }
 
-// Start brings the channel up and spawns the safety-ticker goroutine.
-// Phase 04 will start the polling loop here.
+// Start brings the channel up. The safety ticker always runs (token
+// refresh is needed in either transport). Inbound delivery branches on
+// cfg.Transport: "polling" (default) starts the poll loop; "webhook"
+// registers the channel with the shared router and optionally fires a
+// catch-up sweep for messages missed during downtime.
 func (c *Channel) Start(_ context.Context) error {
 	c.SetRunning(true)
-	if c.creds.OAID != "" {
-		slog.Info("zalo_oa.started", "state", "connected", "oa_id", c.creds.OAID, "name", c.Name())
-		c.MarkHealthy("connected")
-	} else {
+	if c.creds.OAID == "" {
 		slog.Info("zalo_oa.started", "state", "unauthorized", "name", c.Name())
 		c.MarkDegraded("awaiting consent", "no oa_id yet — paste consent code to authorize",
 			channels.ChannelFailureKindAuth, true)
+		// Pre-consent stub: only run the safety ticker so a future refresh
+		// cycle picks up tokens once the operator pastes the code. Skip
+		// transport wiring entirely — there is nothing to poll or receive yet.
+		c.tickerWG.Add(1)
+		go c.runSafetyTicker()
+		return nil
 	}
 
 	c.tickerWG.Add(1)
 	go c.runSafetyTicker()
-	c.pollWG.Add(1)
-	// Use Background so the loop survives the caller's ctx cancel; Stop()
-	// is the canonical exit signal. The loop wraps each cycle in a per-tick
-	// ctx so individual API calls still honor a timeout.
-	go c.runPollLoop(context.Background())
+
+	transport := c.cfg.Transport
+	if transport == "" {
+		transport = "polling"
+	}
+	switch transport {
+	case "webhook":
+		return c.startWebhookTransport()
+	case "polling":
+		c.pollWG.Add(1)
+		// Use Background so the loop survives the caller's ctx cancel; Stop()
+		// is the canonical exit signal. The loop wraps each cycle in a per-tick
+		// ctx so individual API calls still honor a timeout.
+		go c.runPollLoop(context.Background())
+		slog.Info("zalo_oa.started", "state", "connected", "oa_id", c.creds.OAID, "transport", "polling", "name", c.Name())
+		c.MarkHealthy("connected")
+	default:
+		c.MarkFailed("unknown transport",
+			fmt.Sprintf("unknown transport %q (expected polling|webhook)", transport),
+			channels.ChannelFailureKindConfig, false)
+		return fmt.Errorf("zalo_oa: unknown transport %q", transport)
+	}
 	return nil
 }
 
-// Stop signals both ticker + poll loop to exit and waits for them.
+// Stop signals ticker, poll loop, and any in-flight webhook catch-up
+// sweep to exit and waits for them. Webhook teardown unregisters from the
+// shared router — calling on a non-registered instance is a no-op.
 // Best-effort cursor flush happens inside runPollLoop's exit path.
 // Idempotent.
 func (c *Channel) Stop(_ context.Context) error {
 	c.stopOnce.Do(func() { close(c.stopCh) })
+	if c.cfg.Transport == "webhook" && c.webhookRouter != nil {
+		c.webhookRouter.UnregisterInstance(c.instanceID)
+	}
+	c.catchUpWG.Wait()
 	c.tickerWG.Wait()
 	c.pollWG.Wait()
 	c.SetRunning(false)

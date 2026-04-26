@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -194,6 +195,155 @@ func TestRouter_NoSingletonPerTestIsolation(t *testing.T) {
 		t.Error("router b should not see router a's registrations")
 	}
 }
+
+// recordingHandler captures slog records emitted during a test so we can
+// assert on warn-level events without depending on log output formatting.
+type recordingHandler struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *recordingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+func (h *recordingHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(_ string) slog.Handler      { return h }
+
+func (h *recordingHandler) countWarn(msgPrefix string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, r := range h.records {
+		if r.Level >= slog.LevelWarn && strings.HasPrefix(r.Message, msgPrefix) {
+			n++
+		}
+	}
+	return n
+}
+
+func swapDefaultLogger(t *testing.T) *recordingHandler {
+	t.Helper()
+	rec := &recordingHandler{}
+	old := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return rec
+}
+
+// R3-2: persistent empty ExtractMessageID emits exactly one warn at the
+// streak threshold (N=10) and resets so the next 10 trigger another warn.
+func TestRouter_EmptyIDStreak_WarnsAtThreshold(t *testing.T) {
+	rec := swapDefaultLogger(t)
+	_, id, h, srv := newTestServer(t)
+	defer srv.Close()
+	h.extractedID = "" // every event yields no message_id
+
+	// Send 9 → no warn yet.
+	for i := 0; i < 9; i++ {
+		_ = postBody(srv, "instance="+id.String(), `{}`)
+		waitForDispatch(t, h)
+	}
+	if got := rec.countWarn("zalo_webhook.empty_message_id_streak"); got != 0 {
+		t.Fatalf("warn count after 9 = %d, want 0", got)
+	}
+	// 10th → exactly one warn.
+	_ = postBody(srv, "instance="+id.String(), `{}`)
+	waitForDispatch(t, h)
+	if got := rec.countWarn("zalo_webhook.empty_message_id_streak"); got != 1 {
+		t.Fatalf("warn count after 10 = %d, want 1", got)
+	}
+	// 11th → counter reset; no second warn yet.
+	_ = postBody(srv, "instance="+id.String(), `{}`)
+	waitForDispatch(t, h)
+	if got := rec.countWarn("zalo_webhook.empty_message_id_streak"); got != 1 {
+		t.Fatalf("warn count after 11 = %d, want 1 (counter reset)", got)
+	}
+}
+
+// Non-empty ID resets the streak.
+func TestRouter_EmptyIDStreak_ResetsOnNonEmpty(t *testing.T) {
+	rec := swapDefaultLogger(t)
+	r := NewRouter()
+	id := uuid.New()
+	h := newFakeHandler()
+	r.RegisterInstance(id, h, uuid.New())
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	h.extractedID = ""
+	for i := 0; i < 5; i++ {
+		_ = postBody(srv, "instance="+id.String(), `{}`)
+		waitForDispatch(t, h)
+	}
+	// One non-empty event. Use unique ID per event so dedup short-circuits do not fire.
+	h.extractedID = "non-empty-1"
+	_ = postBody(srv, "instance="+id.String(), `{}`)
+	waitForDispatch(t, h)
+
+	// Then 9 more empty — total empty count is 5+9=14 across the test, but
+	// the streak got reset after the non-empty, so we should NOT see a warn.
+	h.extractedID = ""
+	for i := 0; i < 9; i++ {
+		_ = postBody(srv, "instance="+id.String(), `{}`)
+		waitForDispatch(t, h)
+	}
+	if got := rec.countWarn("zalo_webhook.empty_message_id_streak"); got != 0 {
+		t.Fatalf("warn count = %d, want 0 (streak should have been reset by non-empty event)", got)
+	}
+}
+
+// R3-3: Unregister cancels the in-flight handler's ctx so it returns fast.
+func TestRouter_UnregisterCancelsInFlightDispatch(t *testing.T) {
+	r := NewRouter()
+	id := uuid.New()
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+	blockingHandler := &ctxBlockingHandler{started: started, finished: finished}
+	r.RegisterInstance(id, blockingHandler, uuid.New())
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	resp := postBody(srv, "instance="+id.String(), `{}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	// Wait for handler to actually be running.
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not start")
+	}
+
+	r.UnregisterInstance(id)
+
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("handler returned err = %v, want context.Canceled", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("handler did not exit within 100ms after Unregister")
+	}
+}
+
+type ctxBlockingHandler struct {
+	started  chan struct{}
+	finished chan error
+}
+
+func (b *ctxBlockingHandler) HandleWebhookEvent(ctx context.Context, _ json.RawMessage) error {
+	close(b.started)
+	<-ctx.Done()
+	b.finished <- ctx.Err()
+	return ctx.Err()
+}
+
+func (b *ctxBlockingHandler) SignatureVerifier() SignatureVerifier   { return staticVerifier{} }
+func (b *ctxBlockingHandler) MessageIDExtractor() MessageIDExtractor { return staticExtractor{id: ""} }
 
 // silence unused-import vigilance during incremental edits.
 var _ = errors.New

@@ -114,6 +114,35 @@ func TestPollCursor_Snapshot(t *testing.T) {
 	}
 }
 
+func TestPollCursor_LastSeenTimestamp(t *testing.T) {
+	t.Parallel()
+	pc := newPollCursor(10)
+
+	// Empty cursor → 0.
+	if got := pc.LastSeenTimestamp(); got != 0 {
+		t.Errorf("LastSeenTimestamp(empty) = %d, want 0", got)
+	}
+
+	pc.Advance("u1", 100)
+	pc.Advance("u2", 300)
+	pc.Advance("u3", 200)
+
+	if got := pc.LastSeenTimestamp(); got != 300 {
+		t.Errorf("LastSeenTimestamp = %d, want 300 (max)", got)
+	}
+
+	// Advancing a smaller user does not lower the max.
+	pc.Advance("u1", 250)
+	if got := pc.LastSeenTimestamp(); got != 300 {
+		t.Errorf("LastSeenTimestamp = %d, want 300", got)
+	}
+	// New higher entry wins.
+	pc.Advance("u4", 500)
+	if got := pc.LastSeenTimestamp(); got != 500 {
+		t.Errorf("LastSeenTimestamp = %d, want 500", got)
+	}
+}
+
 func TestParseCursorFromConfig(t *testing.T) {
 	t.Parallel()
 	raw := []byte(`{
