@@ -120,6 +120,12 @@
       "groups": "群组",
       "managers": "管理员"
     },
+    "zaloWebhook": {
+      "title": "Webhook URL",
+      "pathLabel": "路径",
+      "loading": "加载中...",
+      "copy": "复制路径"
+    },
     "general": {
       "identity": "身份信息",
       "name": "名称",

@@ -231,6 +231,10 @@ func init() {
 		MsgZaloOAInvalidState:        "OAuth state 令牌无效或已过期",
 		MsgZaloOARedirectURIRequired: "credentials.redirect_uri 必填,且必须与 Zalo 开发者控制台注册的回调完全一致",
 
+		// Zalo Webhook URL RPC
+		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url 仅适用于 zalo_bot 或 zalo_oa 类型的实例",
+		MsgZaloWebhookPathHint:         "在路径前加上网关的公网 URL(例如 https://gw.example.com),然后将完整 URL 注册到 Zalo 开发者控制台。",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 	})

@@ -231,6 +231,10 @@ func init() {
 		MsgZaloOAInvalidState:        "oauth state token is invalid or expired",
 		MsgZaloOARedirectURIRequired: "credentials.redirect_uri is required and must exactly match the callback registered in your Zalo developer console",
 
+		// Zalo webhook URL RPC
+		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url only applies to zalo_bot or zalo_oa instances",
+		MsgZaloWebhookPathHint:         "Prepend your gateway's externally-reachable URL (e.g. https://gw.example.com) to the path, then register the full URL in the Zalo developer console.",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
 	})

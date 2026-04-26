@@ -231,6 +231,10 @@ func init() {
 		MsgZaloOAInvalidState:        "mã state OAuth không hợp lệ hoặc đã hết hạn",
 		MsgZaloOARedirectURIRequired: "credentials.redirect_uri là bắt buộc và phải khớp chính xác với callback đã đăng ký trong Zalo developer console",
 
+		// RPC URL webhook Zalo
+		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url chỉ áp dụng cho instance zalo_bot hoặc zalo_oa",
+		MsgZaloWebhookPathHint:         "Thêm URL công khai của gateway (ví dụ https://gw.example.com) vào trước đường dẫn, rồi đăng ký URL đầy đủ trong Zalo developer console.",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 	})

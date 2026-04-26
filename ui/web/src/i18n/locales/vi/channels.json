@@ -120,6 +120,12 @@
       "groups": "Nhóm",
       "managers": "Quản lý"
     },
+    "zaloWebhook": {
+      "title": "URL Webhook",
+      "pathLabel": "Đường dẫn",
+      "loading": "Đang tải...",
+      "copy": "Sao chép đường dẫn"
+    },
     "general": {
       "identity": "Thông tin",
       "name": "Tên",
