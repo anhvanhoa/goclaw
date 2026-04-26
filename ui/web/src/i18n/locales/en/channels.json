@@ -121,6 +121,12 @@
       "groups": "Groups",
       "managers": "Managers"
     },
+    "zaloWebhook": {
+      "title": "Webhook URL",
+      "pathLabel": "Path",
+      "loading": "Loading...",
+      "copy": "Copy path"
+    },
     "general": {
       "identity": "Identity",
       "name": "Name",
