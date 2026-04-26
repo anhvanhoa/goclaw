@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-const zaloOAStateTTL = 10 * time.Minute
+const (
+	zaloOAStateTTL          = 10 * time.Minute
+	zaloOAMaxStatesPerInst  = 5 // most-recent-N consent attempts per instance
+)
 
 // ZaloOAMethods serves the WS handlers backing the paste-code consent flow.
 type ZaloOAMethods struct {
@@ -33,6 +37,7 @@ type ZaloOAMethods struct {
 }
 
 type zaloOAStateEntry struct {
+	instID    uuid.UUID
 	expiresAt time.Time
 }
 
@@ -189,6 +194,7 @@ func (m *ZaloOAMethods) handleExchangeCode(ctx context.Context, client *gateway.
 		"ok":         true,
 		"oa_id":      creds.OAID,
 		"expires_at": tok.ExpiresAt,
+		"message":    i18n.T(locale, i18n.MsgZaloOAConnected, creds.OAID),
 	}))
 }
 
@@ -202,12 +208,40 @@ func (m *ZaloOAMethods) emitCacheInvalidate() {
 	})
 }
 
-// putState records a freshly minted state token with a 10min TTL.
+// putState records a freshly minted state token with a 10min TTL. Caps
+// pending entries per instance to bound memory abuse from an operator
+// repeatedly clicking "Connect" without ever pasting the code.
 func (m *ZaloOAMethods) putState(instID uuid.UUID, state string) {
 	m.stateMu.Lock()
 	defer m.stateMu.Unlock()
 	m.gcStatesLocked()
-	m.states[stateKey(instID, state)] = zaloOAStateEntry{expiresAt: time.Now().Add(zaloOAStateTTL)}
+	m.evictOldestForInstanceLocked(instID, zaloOAMaxStatesPerInst-1)
+	m.states[stateKey(instID, state)] = zaloOAStateEntry{
+		instID:    instID,
+		expiresAt: time.Now().Add(zaloOAStateTTL),
+	}
+}
+
+// evictOldestForInstanceLocked drops oldest-by-expiry entries for instID
+// until at most `keep` remain. Caller MUST hold m.stateMu.
+func (m *ZaloOAMethods) evictOldestForInstanceLocked(instID uuid.UUID, keep int) {
+	type kv struct {
+		key string
+		exp time.Time
+	}
+	var entries []kv
+	for k, v := range m.states {
+		if v.instID == instID {
+			entries = append(entries, kv{k, v.expiresAt})
+		}
+	}
+	if len(entries) <= keep {
+		return
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].exp.Before(entries[j].exp) })
+	for i := 0; i < len(entries)-keep; i++ {
+		delete(m.states, entries[i].key)
+	}
 }
 
 // consumeState atomically validates+removes a state token. Returns false

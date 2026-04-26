@@ -160,7 +160,7 @@ func TestPollOnce_CursorPreventsDuplicate(t *testing.T) {
 	})
 	c, msgBus := newPollChannel(t, ps, "oa-1")
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := c.pollOnce(context.Background()); err != nil {
 			t.Fatalf("pollOnce #%d: %v", i, err)
 		}
@@ -220,26 +220,36 @@ func TestPollOnce_RateLimitDetected(t *testing.T) {
 	}
 }
 
-// PersistCursor: write-modify-read into the fakeStore's stored config blob.
-func TestPersistCursor_PreservesOperatorConfigKeys(t *testing.T) {
+// FlushCursor: SQL-level merge writes only the poll_cursor key, leaving
+// operator-set sibling keys untouched. Simulated by seeding the fakeStore's
+// in-memory config with operator keys before flushing.
+func TestFlushCursor_PreservesOperatorConfigKeys(t *testing.T) {
 	t.Parallel()
 	fs := &fakeStore{}
+	fs.lastConfig = map[string]any{
+		"poll_interval_seconds": 15,
+		"dm_policy":             "open",
+	}
 	c, _ := newPollChannel(t, newPollServer(t, pollServerOpts{}), "oa-1")
 	c.ciStore = fs
+	c.SetInstanceID(uuid.New())
 	c.cursor.Advance("u1", 100)
 	c.cursor.Advance("u2", 200)
 
-	originalCfg := []byte(`{"poll_interval_seconds":15,"dm_policy":"open"}`)
-	if err := c.persistCursor(context.Background(), originalCfg); err != nil {
-		t.Fatalf("persistCursor: %v", err)
+	if err := c.flushCursor(context.Background()); err != nil {
+		t.Fatalf("flushCursor: %v", err)
 	}
-	if fs.UpdateCount() != 1 {
-		t.Errorf("UpdateCount = %d, want 1", fs.UpdateCount())
+	if fs.MergeCount() != 1 {
+		t.Errorf("MergeCount = %d, want 1", fs.MergeCount())
 	}
 
-	got := parseCursorFromConfig(fs.lastBlob)
+	got := parseCursorFromConfig(fs.ConfigBlob())
 	if got["u1"] != 100 || got["u2"] != 200 {
 		t.Errorf("persisted cursor = %v", got)
+	}
+	// Operator keys must survive the merge.
+	if v, _ := fs.lastConfig["dm_policy"].(string); v != "open" {
+		t.Errorf("dm_policy lost after merge: %v", fs.lastConfig)
 	}
 }
 
@@ -338,4 +348,3 @@ func TestStartStop_PollGoroutineExitsPromptly(t *testing.T) {
 		t.Fatal("Stop did not return within 3s — poll goroutine leaked")
 	}
 }
-

@@ -14,8 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	zalooa "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/oa"
@@ -266,5 +264,3 @@ func (m *mockZaloServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// silence unused for short-stub builds
-var _ = uuid.Nil

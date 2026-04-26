@@ -1,7 +1,6 @@
 package oa
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -141,26 +140,4 @@ func TestParseCursorFromConfig(t *testing.T) {
 	}
 }
 
-func TestMergeCursorIntoConfig(t *testing.T) {
-	t.Parallel()
-	// Existing operator fields must be preserved.
-	original := []byte(`{"poll_interval_seconds":15,"dm_policy":"open"}`)
-	cursor := map[string]int64{"u1": 100, "u2": 200}
-	merged, err := mergeCursorIntoConfig(original, cursor)
-	if err != nil {
-		t.Fatalf("merge: %v", err)
-	}
-
-	got := parseCursorFromConfig(merged)
-	if got["u1"] != 100 || got["u2"] != 200 {
-		t.Errorf("parseback cursor = %v", got)
-	}
-	// Operator fields preserved.
-	if !strings.Contains(string(merged), `"poll_interval_seconds":15`) {
-		t.Errorf("operator field clobbered: %s", merged)
-	}
-	if !strings.Contains(string(merged), `"dm_policy":"open"`) {
-		t.Errorf("operator field clobbered: %s", merged)
-	}
-}
 

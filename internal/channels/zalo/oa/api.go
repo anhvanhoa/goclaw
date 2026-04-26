@@ -26,6 +26,19 @@ const traceEnvVar = "GOCLAW_ZALO_OA_TRACE"
 // Cached at package init; flipping the env live requires restart.
 var traceEnabled = os.Getenv(traceEnvVar) == "1"
 
+// traceBodyMaxBytes caps the response body slice that lands in trace logs.
+// Bodies contain DM text + display names — full dumps land in log
+// aggregators and bloat retention; 256B is enough to read the envelope
+// (error code + first words of message) for debugging.
+const traceBodyMaxBytes = 256
+
+func truncateForTrace(b []byte) string {
+	if len(b) <= traceBodyMaxBytes {
+		return string(b)
+	}
+	return string(b[:traceBodyMaxBytes]) + "…(truncated)"
+}
+
 // uploadTimeout is generous because multipart uploads of a few MB over a
 // mobile carrier can take longer than the default 15s API timeout.
 // Host bases + path constants live in endpoints.go.
@@ -198,7 +211,7 @@ func doRequest(client *http.Client, req *http.Request, path string) (json.RawMes
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 	if traceEnabled {
-		slog.Debug("zalo_oa.raw_response", "path", path, "status", resp.StatusCode, "body", string(raw))
+		slog.Debug("zalo_oa.raw_response", "path", path, "status", resp.StatusCode, "body", truncateForTrace(raw))
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("%w (path=%s)", ErrRateLimit, path)

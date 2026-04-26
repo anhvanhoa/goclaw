@@ -69,29 +69,17 @@ func (c *Channel) runPollLoop(parentCtx context.Context) {
 	}
 }
 
-// flushCursor performs a read-modify-write of the channel_instances.config
-// blob, persisting the cursor under the `poll_cursor` key without clobbering
-// any operator-set fields.
+// flushCursor persists the cursor under the `poll_cursor` config key via a
+// SQL-level JSONB merge. This avoids the read-modify-write race where an
+// operator's UI update of a sibling key (e.g. dm_policy) lands between a
+// Get and Update and gets clobbered by the cursor write.
 func (c *Channel) flushCursor(ctx context.Context) error {
 	if c.ciStore == nil || c.instanceID == [16]byte{} {
 		return errors.New("zalo_oa: cursor flush without store/instance ID")
 	}
-	inst, err := c.ciStore.Get(ctx, c.instanceID)
-	if err != nil {
-		return fmt.Errorf("read instance for cursor flush: %w", err)
-	}
-	return c.persistCursor(ctx, inst.Config)
-}
-
-// persistCursor writes the merged config blob. Exposed for tests so the
-// merge logic can be exercised without a store.Get round-trip.
-func (c *Channel) persistCursor(ctx context.Context, currentConfig []byte) error {
-	merged, err := mergeCursorIntoConfig(currentConfig, c.cursor.Snapshot())
-	if err != nil {
+	patch := map[string]any{configCursorKey: c.cursor.Snapshot()}
+	if err := c.ciStore.MergeConfig(ctx, c.instanceID, patch); err != nil {
 		return fmt.Errorf("merge cursor into config: %w", err)
-	}
-	if err := c.ciStore.Update(ctx, c.instanceID, map[string]any{"config": merged}); err != nil {
-		return fmt.Errorf("update instance config: %w", err)
 	}
 	c.cursor.ClearDirty()
 	return nil

@@ -3,6 +3,7 @@ package oa
 import (
 	"container/list"
 	"encoding/json"
+	"sort"
 	"sync"
 )
 
@@ -114,12 +115,24 @@ func (c *pollCursor) evictLocked() {
 	}
 }
 
-// loadFromMap seeds the cursor from a previously-persisted map. Order of
-// initial insertion is non-deterministic; LRU position is meaningless for
-// freshly-loaded data anyway.
+// loadFromMap seeds the cursor from a previously-persisted map. When the
+// persisted set is larger than max, eviction-on-load drops entries — keys
+// are sorted ascending by timestamp first so the OLDEST cursors are the
+// ones evicted, not random ones from Go map-iteration order. (Map order
+// would mean a heavy OA loses different users on every restart.)
 func (c *pollCursor) loadFromMap(m map[string]int64) {
-	for k, v := range m {
-		c.Advance(k, v)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if m[keys[i]] != m[keys[j]] {
+			return m[keys[i]] < m[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	for _, k := range keys {
+		c.Advance(k, m[k])
 	}
 	c.ClearDirty() // post-load is a clean state
 }
@@ -144,15 +157,3 @@ func parseCursorFromConfig(raw []byte) map[string]int64 {
 	return out
 }
 
-// mergeCursorIntoConfig writes the cursor map under the poll_cursor key in
-// the existing config blob, preserving all other operator-set keys.
-func mergeCursorIntoConfig(orig []byte, cursor map[string]int64) ([]byte, error) {
-	top := map[string]any{}
-	if len(orig) > 0 {
-		if err := json.Unmarshal(orig, &top); err != nil {
-			return nil, err
-		}
-	}
-	top[configCursorKey] = cursor
-	return json.Marshal(top)
-}

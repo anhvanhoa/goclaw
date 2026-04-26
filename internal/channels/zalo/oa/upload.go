@@ -78,7 +78,9 @@ func sanitizeFilename(raw string) string {
 	name := filepath.Base(strings.TrimSpace(raw))
 	switch name {
 	case "", ".", "..", string(filepath.Separator):
-		return fmt.Sprintf("file-%d.bin", time.Now().Unix())
+		// UnixNano avoids same-second collisions when two pathological
+		// filenames hit the fallback within the same upload batch.
+		return fmt.Sprintf("file-%d.bin", time.Now().UnixNano())
 	}
 	if len(name) > maxFilenameLen {
 		name = name[:maxFilenameLen]

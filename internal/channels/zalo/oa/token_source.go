@@ -33,10 +33,15 @@ type tokenSource struct {
 // ForceRefresh marks the cached token as stale so the NEXT Access() call
 // performs an HTTP refresh. Used by Send when the API returns an auth-class
 // error mid-call (token rotated externally or a clock skew issue).
+//
+// We zero BOTH ExpiresAt and AccessToken so the Access() guard cannot
+// short-circuit on a non-empty token even if a future change loosens the
+// expiry check. Belt-and-suspenders: today either alone is sufficient.
 func (ts *tokenSource) ForceRefresh() {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	ts.creds.ExpiresAt = time.Time{} // zero → time.Until == negative → triggers refresh
+	ts.creds.ExpiresAt = time.Time{}
+	ts.creds.AccessToken = ""
 }
 
 // Access returns a currently-valid access token, refreshing under the same

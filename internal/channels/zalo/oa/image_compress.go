@@ -25,6 +25,13 @@ var (
 	maxSideLadder     = []int{1600, 1200, 900, 600}
 )
 
+// maxDecodePixels caps the W*H product before image.Decode allocates a
+// pixel buffer. A 25M-pixel limit (≈5000×5000) covers any legitimate
+// chat-image; rejecting larger inputs prevents a malicious caller from
+// using a small payload (e.g. a 1MB PNG with 30000×30000 dimensions) to
+// pin a multi-GB RGBA buffer in memory.
+const maxDecodePixels = 25_000_000
+
 // compressForZaloImage takes raw image bytes of any format and tries to
 // produce an output under maxBytes. Returns the compressed bytes and the
 // resulting MIME type on success; returns the original bytes + MIME
@@ -35,6 +42,15 @@ var (
 func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byte, string, error) {
 	if len(data) <= maxBytes {
 		return data, originalMIME, nil
+	}
+
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", fmt.Errorf("zalo_oa: decode image header: %w", err)
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > maxDecodePixels {
+		return nil, "", fmt.Errorf("zalo_oa: image dimensions %dx%d exceed %d pixel cap",
+			cfg.Width, cfg.Height, maxDecodePixels)
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(data))

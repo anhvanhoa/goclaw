@@ -2,7 +2,9 @@ package oa
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -20,13 +22,44 @@ import (
 // updateN uses atomic.Int32 so concurrent test goroutines can read it
 // without the lock.
 type fakeStore struct {
-	mu        sync.Mutex
-	updateN   atomic.Int32
-	lastBlob  []byte
-	updateErr error
+	mu         sync.Mutex
+	updateN    atomic.Int32
+	mergeN     atomic.Int32
+	lastBlob   []byte
+	lastConfig map[string]any // tracks merged config across MergeConfig calls
+	updateErr  error
 }
 
 func (f *fakeStore) UpdateCount() int { return int(f.updateN.Load()) }
+func (f *fakeStore) MergeCount() int  { return int(f.mergeN.Load()) }
+
+// ConfigBlob returns the merged config as JSON bytes, mirroring what would
+// be persisted via SQL JSONB merge.
+func (f *fakeStore) ConfigBlob() []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lastConfig == nil {
+		return nil
+	}
+	b, _ := json.Marshal(f.lastConfig)
+	return b
+}
+
+// MergeConfig mirrors PG's SQL-level shallow merge: keys in `partial`
+// overwrite, keys-only-in-existing are preserved.
+func (f *fakeStore) MergeConfig(_ context.Context, _ uuid.UUID, partial map[string]any) error {
+	f.mergeN.Add(1)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	if f.lastConfig == nil {
+		f.lastConfig = make(map[string]any)
+	}
+	maps.Copy(f.lastConfig, partial)
+	return nil
+}
 
 func (f *fakeStore) Update(_ context.Context, _ uuid.UUID, updates map[string]any) error {
 	f.updateN.Add(1)
@@ -184,7 +217,7 @@ func TestAccess_SingleFlightUnderConcurrency(t *testing.T) {
 	errs := make([]error, N)
 	start := make(chan struct{})
 
-	for i := 0; i < N; i++ {
+	for i := range N {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
