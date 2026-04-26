@@ -240,4 +240,5 @@ const (
 	MsgZaloOAMediaTooLarge      = "error.zalo_oa_media_too_large"      // "media exceeds size limit (%d MB)"
 	MsgZaloOAWindowExpired      = "error.zalo_oa_window_expired"       // "48-hour user-interaction window expired"
 	MsgZaloOARateLimited        = "warn.zalo_oa_rate_limited"          // "zalo oauth rate limited; backing off"
+	MsgZaloOARedirectURIRequired = "error.zalo_oa_redirect_uri_required" // "credentials.redirect_uri is required and must match the dev-console callback"
 )

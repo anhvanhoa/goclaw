@@ -235,6 +235,7 @@ func init() {
 		MsgZaloOAMediaTooLarge:      "tệp đính kèm vượt quá giới hạn (%d MB)",
 		MsgZaloOAWindowExpired:      "đã quá cửa sổ tương tác 48 giờ — người dùng cần nhắn cho OA trước",
 		MsgZaloOARateLimited:        "Zalo OAuth bị giới hạn tốc độ; tạm dừng polling 30 giây",
+		MsgZaloOARedirectURIRequired: "credentials.redirect_uri là bắt buộc và phải khớp chính xác với callback đã đăng ký trong Zalo developer console",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",

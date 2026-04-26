@@ -33,7 +33,7 @@ export function ZaloOAConnectBody({ flow, disabled }: Props) {
         )}
         {url && (
           <div className="flex items-center gap-2">
-            <Input value={url} readOnly className="text-xs" />
+            <Input value={url} readOnly className="text-sm" />
             <Button type="button" variant="outline" size="sm" onClick={handleCopy} aria-label={t("zaloOa.copyUrl")}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>

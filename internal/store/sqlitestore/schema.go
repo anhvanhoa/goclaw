@@ -505,9 +505,17 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_team_chat ON vault_documents(team_id, 
 	// Version 25 → 26: rename Zalo channel types to align with Zalo's own
 	// product taxonomy (mirrors PG migration 000057). Three-step swap via
 	// zalo_oa_tmp sentinel — defensive against future unique constraints.
-	25: `UPDATE channel_instances SET channel_type = 'zalo_oa_tmp' WHERE channel_type = 'zalo_oauth';
-UPDATE channel_instances SET channel_type = 'zalo_bot'    WHERE channel_type = 'zalo_oa';
-UPDATE channel_instances SET channel_type = 'zalo_oa'     WHERE channel_type = 'zalo_oa_tmp';`,
+	// Idempotency guard: each step gates on the existence of the legacy
+	// 'zalo_oauth' marker so that re-running the patch on a post-rename DB
+	// (e.g. after manual SchemaVersion downgrade) is a no-op rather than
+	// silently flipping new 'zalo_oa' rows back to 'zalo_bot'.
+	25: `UPDATE channel_instances SET channel_type = 'zalo_oa_tmp'
+  WHERE channel_type = 'zalo_oauth';
+UPDATE channel_instances SET channel_type = 'zalo_bot'
+  WHERE channel_type = 'zalo_oa'
+    AND EXISTS (SELECT 1 FROM channel_instances WHERE channel_type = 'zalo_oa_tmp');
+UPDATE channel_instances SET channel_type = 'zalo_oa'
+  WHERE channel_type = 'zalo_oa_tmp';`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.

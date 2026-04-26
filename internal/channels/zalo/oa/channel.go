@@ -51,6 +51,7 @@ type Channel struct {
 
 	// Polling state (phase 04).
 	cursor       *pollCursor
+	seenIDs      *seenMessageIDs // dedup fallback for messages with time == 0
 	pollInterval time.Duration
 	pollWG       sync.WaitGroup
 
@@ -81,6 +82,7 @@ func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 		ciStore:              ciStore,
 		cfg:                  cfg,
 		cursor:               newPollCursor(defaultCursorMaxEntries),
+		seenIDs:              newSeenMessageIDs(0),
 		pollInterval:         pollIntervalFromCfg(cfg.PollIntervalSeconds),
 		safetyTickerInterval: tickerInterval(cfg.SafetyTickerMinutes),
 		stopCh:               make(chan struct{}),
@@ -300,7 +302,11 @@ func (c *Channel) runSafetyTicker() {
 			// Access() does its own under-mutex check for refreshMargin —
 			// we deliberately don't pre-read creds.ExpiresAt here to avoid
 			// racing with concurrent refresh writes from Send (phase 03+).
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			// Tenant ID is propagated so the eventual store.Update() inside
+			// Persist sees the correct scope (defense-in-depth — store.Update
+			// is keyed by id but downstream cache/event listeners may scope
+			// by tenant).
+			ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), c.TenantID()), 30*time.Second)
 			if _, err := c.tokens.Access(ctx); err != nil && !errors.Is(err, ErrNotAuthorized) {
 				c.markAuthFailedIfNeeded(err)
 				slog.Warn("zalo_oa.safety_tick_refresh_failed", "instance_id", c.instanceID, "error", err)

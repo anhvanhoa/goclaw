@@ -103,11 +103,23 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 		if m.FromID == "" || m.FromID == c.creds.OAID {
 			continue // drop malformed + OA echoes
 		}
-		// Dedup by the (from_id, time) cursor. When time == 0 (Zalo
-		// omitted the field) we fall back to message_id dedup via the
-		// cursor's dirty flag — a message can still re-emit once if we
-		// restart inside the same poll window, which is acceptable.
-		if m.Time != 0 && m.Time <= c.cursor.Get(m.FromID) {
+		if m.Time == 0 && m.MessageID == "" {
+			// Without either signal there's no dedup hook — would re-dispatch
+			// every poll for as long as the row stays in the listrecentchat
+			// window. Drop rather than risk duplicate handler invocations.
+			continue
+		}
+		// Dedup by the (from_id, time) cursor when Zalo provides `time`.
+		// When time == 0 (field omitted), fall back to a bounded LRU of
+		// message_ids — otherwise a missing-time row would re-dispatch
+		// every poll tick for as long as it sits in listrecentchat's
+		// window. Real-world incidence is near zero (Zalo always sets
+		// time) but the safety net must hold.
+		if m.Time != 0 {
+			if m.Time <= c.cursor.Get(m.FromID) {
+				continue
+			}
+		} else if m.MessageID != "" && c.seenIDs.SeenOrAdd(m.MessageID) {
 			continue
 		}
 		c.dispatchInbound(m)

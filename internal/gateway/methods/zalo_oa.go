@@ -21,15 +21,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-const (
-	zaloOAStateTTL = 10 * time.Minute
-	// zaloOADefaultRedirectURI is used only when the instance's creds
-	// don't carry one. Zalo enforces redirect_uri match against the
-	// dev-console-registered callback (error_code=-14003), so this
-	// placeholder is never going to work in practice — operators MUST
-	// set creds.redirect_uri to their registered callback.
-	zaloOADefaultRedirectURI = "https://oa.local/zalo_oa_callback"
-)
+const zaloOAStateTTL = 10 * time.Minute
 
 // ZaloOAMethods serves the WS handlers backing the paste-code consent flow.
 type ZaloOAMethods struct {
@@ -80,6 +72,13 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
 		return
 	}
+	if inst.TenantID != client.TenantID() {
+		// Defense-in-depth: store-layer Get already filters by tenant_id,
+		// but a future refactor that loosens that check shouldn't allow
+		// cross-tenant consent URL leakage.
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
+		return
+	}
 	if inst.ChannelType != channels.TypeZaloOA {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgZaloOAInvalidChannelType)))
 		return
@@ -90,6 +89,13 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "zalo_oa: missing app_id in credentials"))
 		return
 	}
+	if creds.RedirectURI == "" {
+		// Zalo rejects mismatched redirect_uri with error_code=-14003 —
+		// fail fast with an actionable error rather than letting the user
+		// run the consent flow and hit an opaque Zalo error page.
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgZaloOARedirectURIRequired)))
+		return
+	}
 
 	state, err := newStateToken()
 	if err != nil {
@@ -98,11 +104,7 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 	}
 	m.putState(instID, state)
 
-	redirectURI := creds.RedirectURI
-	if redirectURI == "" {
-		redirectURI = zaloOADefaultRedirectURI
-	}
-	url := zalooa.ConsentURL(creds.AppID, redirectURI, state)
+	url := zalooa.ConsentURL(creds.AppID, creds.RedirectURI, state)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"url":   url,
 		"state": state,
@@ -138,6 +140,10 @@ func (m *ZaloOAMethods) handleExchangeCode(ctx context.Context, client *gateway.
 
 	inst, err := m.store.Get(ctx, instID)
 	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
+		return
+	}
+	if inst.TenantID != client.TenantID() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
 		return
 	}

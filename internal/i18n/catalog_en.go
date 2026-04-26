@@ -235,6 +235,7 @@ func init() {
 		MsgZaloOAMediaTooLarge:      "media exceeds size limit (%d MB)",
 		MsgZaloOAWindowExpired:      "48-hour user-interaction window expired — recipient must message the OA first",
 		MsgZaloOARateLimited:        "zalo oauth rate limited; backing off polling for 30 seconds",
+		MsgZaloOARedirectURIRequired: "credentials.redirect_uri is required and must exactly match the callback registered in your Zalo developer console",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",

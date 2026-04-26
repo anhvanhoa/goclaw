@@ -235,6 +235,7 @@ func init() {
 		MsgZaloOAMediaTooLarge:      "媒体超过大小限制(%d MB)",
 		MsgZaloOAWindowExpired:      "48 小时互动窗口已过期 — 用户需先向 OA 发送消息",
 		MsgZaloOARateLimited:        "Zalo OAuth 被限流;暂停轮询 30 秒",
+		MsgZaloOARedirectURIRequired: "credentials.redirect_uri 必填,且必须与 Zalo 开发者控制台注册的回调完全一致",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWsCall } from "@/hooks/use-ws-call";
 
 /**
@@ -87,6 +87,7 @@ export function useZaloOAConnect(
   const [url, setUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [done, setDone] = useState(false);
+  const firedRef = useRef(false);
 
   // Fetch consent URL once the flow becomes active.
   useEffect(() => {
@@ -112,14 +113,19 @@ export function useZaloOAConnect(
     setUrl("");
     setCopied(false);
     setDone(false);
+    firedRef.current = false;
     consent.reset();
     exchange.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Fire onSuccess exactly once when exchange completes.
+  // Fire onSuccess exactly once when exchange completes. firedRef guards
+  // against re-firing if the parent passes a fresh onSuccess closure during
+  // the post-success window before reset (done stays true ~1.5s while the
+  // success view is visible).
   useEffect(() => {
-    if (!done) return;
+    if (!done || firedRef.current) return;
+    firedRef.current = true;
     onSuccess();
   }, [done, onSuccess]);
 
@@ -183,6 +189,7 @@ export function useZaloOAConnect(
       setState("");
       setUrl("");
       setDone(false);
+      firedRef.current = false;
     },
   };
 }

@@ -4,10 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
+
+// legacyTokenWarnOnce ensures the API-drift warning fires at most once per
+// process lifetime. Without the gate, a Zalo contract flip would emit the
+// warning on every upload until the next deploy.
+var legacyTokenWarnOnce sync.Once
 
 const maxFilenameLen = 200 // Zalo's observed cap
 
@@ -99,7 +106,15 @@ func parseUploadAttachmentID(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("zalo_oa: decode upload response: %w", err)
 	}
 	id := env.Data.AttachmentID
-	if id == "" {
+	if id == "" && env.Data.Token != "" {
+		// Early signal of API drift — current Zalo OA returns
+		// `attachment_id`. If we ever hit this branch it likely means the
+		// upstream contract changed (or a different upload endpoint is in
+		// use). Investigate before relying on the legacy alias long-term.
+		// Once-per-process to avoid log spam if Zalo flips the contract.
+		legacyTokenWarnOnce.Do(func() {
+			slog.Warn("zalo_oa.upload.legacy_token_field_seen")
+		})
 		id = env.Data.Token
 	}
 	if id == "" {
