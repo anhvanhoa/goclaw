@@ -324,6 +324,13 @@ func TestMethodRole_ZaloOA_IsAdmin(t *testing.T) {
 	if got := MethodRole(protocol.MethodChannelInstancesZaloOAExchangeCode); got != RoleAdmin {
 		t.Fatalf("zalo_oa.exchange_code must be RoleAdmin; got %q", got)
 	}
+	// webhook_url returns the operator-bound URL for both zalo_bot and
+	// zalo_oa. The URL embeds the instance ID, so it is config-shape data
+	// that must sit alongside channel mutation operations on the admin
+	// allowlist (not viewer / operator).
+	if got := MethodRole(protocol.MethodChannelInstancesZaloWebhookURL); got != RoleAdmin {
+		t.Fatalf("zalo.webhook_url must be RoleAdmin; got %q", got)
+	}
 }
 
 func TestMethodRole_ApprovalsList_IsViewer(t *testing.T) {

@@ -87,6 +87,12 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 	maxPages := pollBurndownMaxPagesFromCfg(c.cfg.PollBurndownMaxPages)
 
 	for page := 0; page < maxPages; page++ {
+		// Honour shutdown / poll-tick cancellation between pages so a
+		// stop signal doesn't have to wait for the burn-down to exhaust
+		// all maxPages * pageSize messages (S2).
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		offset := page * pageSize
 		msgs, err := c.listRecentChatRetryAuth(ctx, offset, pageSize)
 		if err != nil {

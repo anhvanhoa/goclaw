@@ -67,6 +67,12 @@ func (v botSignatureVerifier) Verify(h http.Header, _ []byte) error {
 	if got == "" {
 		return errors.New("zalo_bot.webhook: missing X-Bot-Api-Secret-Token")
 	}
+	// Length precondition mirrors oa/webhook_signature.go (S1): reject up
+	// front so the timing of the negative path doesn't depend on
+	// ConstantTimeCompare's undocumented length-mismatch behavior.
+	if len(got) != len(v.secret) {
+		return common.ErrSignatureMismatch
+	}
 	if subtle.ConstantTimeCompare([]byte(got), []byte(v.secret)) != 1 {
 		return common.ErrSignatureMismatch
 	}
