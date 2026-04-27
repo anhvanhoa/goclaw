@@ -227,6 +227,44 @@ func TestSQLiteSchemaUpgrade_25_to_26(t *testing.T) {
 	}
 }
 
+// TestSQLiteSchemaUpgrade_25_to_26_ProductionShape locks in the C1 review
+// fix: 'zalo_oauth' was a transient name introduced inside this PR's commit
+// chain and never released, so production DBs only carry legacy 'zalo_oa'
+// (Bot semantics) rows. An EXISTS('zalo_oauth') idempotency guard would
+// silently no-op the migration on prod, leaving 'zalo_oa' rows that the
+// new OA factory would mis-interpret as OAuth OAs.
+func TestSQLiteSchemaUpgrade_25_to_26_ProductionShape(t *testing.T) {
+	db := openTestDBAtVersion(t, 25)
+
+	tenantID := "00000000-0000-0000-0000-000000000001"
+	agentID := "00000000-0000-0000-0000-000000000002"
+	if _, err := db.Exec(`INSERT INTO tenants (id, name, slug, status) VALUES (?, 'T', 't', 'active')`, tenantID); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO agents (id, agent_key, display_name, status, tenant_id, owner_id, model, provider)
+		VALUES (?, 'agt', 'A', 'active', ?, 'owner', 'gpt-4o', 'openai')`, agentID, tenantID); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+
+	// Production shape: ONLY a legacy 'zalo_oa' row (Bot variant).
+	if _, err := db.Exec(`INSERT INTO channel_instances (id, name, channel_type, agent_id, tenant_id)
+		VALUES ('ci-prod', 'prod-bot', 'zalo_oa', ?, ?)`, agentID, tenantID); err != nil {
+		t.Fatalf("seed prod row: %v", err)
+	}
+
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema (v25→26 prod-shape) failed: %v", err)
+	}
+
+	var got string
+	if err := db.QueryRow(`SELECT channel_type FROM channel_instances WHERE id = 'ci-prod'`).Scan(&got); err != nil {
+		t.Fatalf("read ci-prod: %v", err)
+	}
+	if got != "zalo_bot" {
+		t.Fatalf("prod 'zalo_oa' row must flip to 'zalo_bot'; got %q (idempotency guard regressed?)", got)
+	}
+}
+
 // TestSQLiteVaultStore_UpsertTriggerEnforcesCheck verifies the v24 triggers
 // fire on both the INSERT path and the UPDATE path (UPSERT ON CONFLICT).
 func TestSQLiteVaultStore_UpsertTriggerEnforcesCheck(t *testing.T) {

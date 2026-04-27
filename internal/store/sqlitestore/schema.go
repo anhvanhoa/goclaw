@@ -566,17 +566,14 @@ CREATE INDEX IF NOT EXISTS idx_heartbeats_due
 	// product taxonomy (mirrors PG migration 000058). Three-step swap via
 	// zalo_oa_tmp sentinel — defensive against future unique constraints.
 	//
-	// Idempotency guard: each step gates on the existence of the legacy
-	// 'zalo_oauth' marker so that re-running the patch on a post-rename DB
-	// (e.g. after manual SchemaVersion downgrade) is a no-op rather than
-	// silently flipping new 'zalo_oa' rows back to 'zalo_bot'.
-	26: `UPDATE channel_instances SET channel_type = 'zalo_oa_tmp'
-  WHERE channel_type = 'zalo_oauth';
-UPDATE channel_instances SET channel_type = 'zalo_bot'
-  WHERE channel_type = 'zalo_oa'
-    AND EXISTS (SELECT 1 FROM channel_instances WHERE channel_type = 'zalo_oa_tmp');
-UPDATE channel_instances SET channel_type = 'zalo_oa'
-  WHERE channel_type = 'zalo_oa_tmp';`,
+	// 'zalo_oauth' was transient inside this PR and never released.
+	// Production DBs only have legacy 'zalo_oa' (Bot semantics) rows that
+	// must flip to 'zalo_bot'. SchemaVersion gating in applyMigrations
+	// prevents re-runs, so no EXISTS guard is needed (and a guard on the
+	// 'zalo_oauth'/'zalo_oa_tmp' marker would silently no-op on prod).
+	26: `UPDATE channel_instances SET channel_type = 'zalo_oa_tmp' WHERE channel_type = 'zalo_oauth';
+UPDATE channel_instances SET channel_type = 'zalo_bot'    WHERE channel_type = 'zalo_oa';
+UPDATE channel_instances SET channel_type = 'zalo_oa'     WHERE channel_type = 'zalo_oa_tmp';`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.
