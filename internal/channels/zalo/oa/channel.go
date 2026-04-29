@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,9 +66,10 @@ type Channel struct {
 	tickerWG   sync.WaitGroup
 	catchUpWG  sync.WaitGroup // tracks the optional webhook catch-up goroutine (N2)
 
-	// webhookRouter is the shared Zalo router for the gateway. Wired by
-	// FactoryWithRouter; nil for callers that still use the legacy Factory.
-	// Phase 05 calls router.RegisterInstance(...) when transport=webhook.
+	// webhookRouter is the shared Zalo router for the gateway. Set by
+	// Factory to common.SharedRouter(); tests assign an isolated
+	// NewRouter() via white-box (same-package) field access for
+	// parallel-test isolation.
 	webhookRouter *common.Router
 }
 
@@ -129,6 +131,20 @@ func (c *Channel) ForceRefreshForTest() {
 
 // Type returns the channel type identifier.
 func (c *Channel) Type() string { return channels.TypeZaloOA }
+
+// Compile-time guard: oa.Channel must satisfy channels.WebhookChannel.
+var _ channels.WebhookChannel = (*Channel)(nil)
+
+// WebhookHandler implements channels.WebhookChannel. Both bot and oa
+// channel families call SharedRouter().MountRoute() — first caller wins
+// the (path, router) tuple, subsequent callers get ("", nil). The
+// per-instance dispatch is keyed off the `?instance=<uuid>` query
+// param. No transport gate: polling-mode rows also surface the route
+// (matches facebook/pancake; the route returns 404 for unregistered
+// instances).
+func (c *Channel) WebhookHandler() (string, http.Handler) {
+	return common.SharedRouter().MountRoute()
+}
 
 // Start brings the channel up. The safety ticker always runs (token
 // refresh is needed in either transport). Inbound delivery branches on

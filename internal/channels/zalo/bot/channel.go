@@ -47,9 +47,10 @@ type Channel struct {
 	botID         string    // captured from getMe at Start; A8 self-echo filter
 	instanceID    uuid.UUID // injected via SetInstanceID after construction
 
-	// webhookRouter is wired by FactoryWithRouter; nil for the legacy
-	// single-tenant config path. Used to register/unregister this instance
-	// when transport == "webhook".
+	// webhookRouter is set by Factory to common.SharedRouter(); tests
+	// assign an isolated NewRouter() via white-box (same-package) field
+	// access. Used to register/unregister this instance when
+	// transport == "webhook".
 	webhookRouter *common.Router
 
 	// legacyPhotoSentinelWarn fires once if any caller still emits the
@@ -61,6 +62,20 @@ type Channel struct {
 // channel can register itself with the shared webhook router under its
 // per-row UUID.
 func (c *Channel) SetInstanceID(id uuid.UUID) { c.instanceID = id }
+
+// Compile-time guard: bot.Channel must satisfy channels.WebhookChannel.
+var _ channels.WebhookChannel = (*Channel)(nil)
+
+// WebhookHandler implements channels.WebhookChannel. Both bot and oa
+// channel families call SharedRouter().MountRoute() — first caller wins
+// the (path, router) tuple, subsequent callers get ("", nil). The
+// per-instance dispatch is keyed off the `?instance=<uuid>` query
+// param. No transport gate: polling-mode rows also surface the route
+// (matches facebook/pancake; the route returns 404 for unregistered
+// instances).
+func (c *Channel) WebhookHandler() (string, http.Handler) {
+	return common.SharedRouter().MountRoute()
+}
 
 // New creates a new Zalo channel.
 func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore) (*Channel, error) {
@@ -128,10 +143,6 @@ func (c *Channel) Start(ctx context.Context) error {
 		if c.webhookSecret == "" {
 			c.SetRunning(false)
 			return fmt.Errorf("zalo_bot: transport=webhook requires webhook_secret")
-		}
-		if c.webhookRouter == nil {
-			c.SetRunning(false)
-			return fmt.Errorf("zalo_bot: transport=webhook requires shared router (use FactoryWithRouter)")
 		}
 		c.webhookRouter.RegisterInstance(c.instanceID, c, c.TenantID())
 		slog.Info("zalo_bot.webhook.registered",
