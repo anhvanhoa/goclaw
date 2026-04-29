@@ -8,11 +8,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
-// startWebhookTransport registers this channel with the shared router and
-// optionally fires the catch-up sweep. Returns nil even on misconfig — the
-// channel marks itself Failed so the dashboard surfaces the error rather
-// than crashing instance_loader. Called from Channel.Start when
-// cfg.Transport == "webhook".
+// startWebhookTransport registers with the shared router and optionally
+// fires the catch-up sweep. Returns nil on misconfig (channel is marked
+// Failed) so instance_loader doesn't crash.
 func (c *Channel) startWebhookTransport() error {
 	mode := normalizeMode(c.cfg.WebhookSignatureMode)
 	if c.cfg.WebhookOASecretKey == "" && mode != SignatureModeDisabled {
@@ -26,10 +24,7 @@ func (c *Channel) startWebhookTransport() error {
 		"instance_id", c.instanceID, "oa_id", c.creds.OAID, "signature_mode", mode)
 
 	if c.cfg.CatchUpOnRestart {
-		// B4: spawn in goroutine so Start returns immediately and doesn't
-		// trip instance_loader.startChannelWithTimeout.
-		// N2: track in WaitGroup + cancel ctx on stopCh so Stop() drains
-		// cleanly without leaking.
+		// Goroutine + WaitGroup so Start returns immediately and Stop drains.
 		c.catchUpWG.Add(1)
 		go c.runCatchUpSweepGoroutine()
 	}
@@ -37,14 +32,11 @@ func (c *Channel) startWebhookTransport() error {
 	return nil
 }
 
-// runCatchUpSweepGoroutine wraps runCatchUpSweep with WaitGroup tracking
-// and stop-channel-aware cancellation so Stop() can wait for it to drain.
+// runCatchUpSweepGoroutine runs runCatchUpSweep with stopCh-aware cancel.
 func (c *Channel) runCatchUpSweepGoroutine() {
 	defer c.catchUpWG.Done()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	// Honor Stop signal — closing stopCh cancels the sweep ctx so an
-	// in-flight listrecentchat call exits promptly.
 	done := make(chan struct{})
 	defer close(done)
 	go func() {

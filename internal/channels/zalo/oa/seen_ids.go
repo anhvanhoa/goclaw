@@ -5,10 +5,8 @@ import (
 	"sync"
 )
 
-// seenMessageIDs is a bounded LRU set used as the time==0 dedup fallback in
-// pollOnce. Real-world Zalo responses always carry `time`, so this set
-// usually stays empty — it exists only to bound the worst-case re-emit
-// when a message lands without a timestamp.
+// seenMessageIDs is the time==0 dedup fallback for pollOnce. Bounded LRU
+// set; usually stays empty since Zalo always sets time in practice.
 type seenMessageIDs struct {
 	mu    sync.Mutex
 	max   int
@@ -27,8 +25,8 @@ func newSeenMessageIDs(max int) *seenMessageIDs {
 	}
 }
 
-// SeenOrAdd reports whether id was already in the set. If absent, id is
-// inserted as MRU and the LRU tail is evicted to keep size <= max.
+// SeenOrAdd reports whether id was already present; otherwise inserts
+// as MRU and evicts the LRU tail to keep size <= max.
 func (s *seenMessageIDs) SeenOrAdd(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

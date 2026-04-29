@@ -7,10 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Dedup is a bounded LRU+TTL cache of seen webhook message IDs, scoped per
-// channel-instance UUID. The webhook router consults it to short-circuit
-// retries Zalo sends after timeouts. Polling has a different dedup
-// (oa/seen_ids.go) and is unaffected by this struct.
+// Dedup is a bounded LRU+TTL cache of webhook message IDs scoped per
+// channel-instance UUID. Used by the router to short-circuit retries
+// Zalo sends after timeouts.
 type Dedup struct {
 	mu  sync.Mutex
 	ttl time.Duration
@@ -18,9 +17,7 @@ type Dedup struct {
 	m   map[string]time.Time // key: instanceID|messageID
 }
 
-// NewDedup returns a Dedup that expires entries after ttl and caps total
-// entries at max. When the cap is exceeded the oldest entry (by add time)
-// is evicted on the next SeenOrAdd call.
+// NewDedup returns a Dedup with TTL and max-entries cap.
 func NewDedup(ttl time.Duration, max int) *Dedup {
 	return &Dedup{
 		ttl: ttl,
@@ -30,9 +27,7 @@ func NewDedup(ttl time.Duration, max int) *Dedup {
 }
 
 // SeenOrAdd records the (instanceID, messageID) pair and reports whether
-// the pair was already seen within the TTL window. A missing/empty
-// messageID is treated as not-seen and not recorded — the caller is
-// responsible for whether to allow it through.
+// it was already seen within TTL. Empty messageID is not-seen and not recorded.
 func (d *Dedup) SeenOrAdd(instanceID uuid.UUID, messageID string) bool {
 	if messageID == "" {
 		return false
@@ -55,8 +50,7 @@ func (d *Dedup) SeenOrAdd(instanceID uuid.UUID, messageID string) bool {
 	return false
 }
 
-// Len reports the current number of tracked entries (live + not-yet-pruned
-// expired). Mainly for tests/metrics.
+// Len reports the current entry count (live + not-yet-pruned).
 func (d *Dedup) Len() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()

@@ -11,14 +11,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// runPollLoop is started by Start() and exits when stopCh closes. It
-// runs a polling cycle on each tick; on ErrRateLimit it switches to the
-// rate-limit ticker until a clean cycle returns. Cursor flushes are
-// debounced (60s by default) so we don't pummel the DB per-message.
-//
-// Belt-and-suspenders: if cfg.Transport=="webhook" we early-return so a
-// future regression that spawned this loop directly cannot run alongside
-// the webhook handler and double-dispatch.
+// runPollLoop runs a polling cycle on each tick; ErrRateLimit switches
+// to rate-limit ticker until a clean cycle. Cursor flushes are debounced.
+// Early-returns on webhook transport so a regression can't double-dispatch.
 func (c *Channel) runPollLoop(parentCtx context.Context) {
 	defer c.pollWG.Done()
 	if c.cfg.Transport == "webhook" {
@@ -46,9 +41,8 @@ func (c *Channel) runPollLoop(parentCtx context.Context) {
 				}
 			}
 		case <-t.C:
-			// Cycle ctx must outlive the underlying HTTP client timeout
-			// (30s) — otherwise the ctx fires first and the error says
-			// "context deadline exceeded" instead of the real cause.
+			// Cycle ctx outlives the HTTP client timeout (30s) so errors
+			// surface their real cause, not "context deadline exceeded".
 			cycleCtx, cancel := context.WithTimeout(pollCtx, 45*time.Second)
 			err := c.pollOnce(cycleCtx)
 			cancel()
@@ -61,10 +55,8 @@ func (c *Channel) runPollLoop(parentCtx context.Context) {
 				}
 			case err != nil:
 				slog.Warn("zalo_oa.poll_failed", "oa_id", c.creds.OAID, "error", err)
-				// Auth-class errors that survive the in-pollOnce retry-
-				// once-on-auth mean the operator must re-consent. Flip
-				// health so the dashboard surfaces the red re-auth prompt
-				// instead of staying green while logs scream.
+				// Auth errors after pollOnce's retry-once-on-auth mean the
+				// operator must re-consent.
 				c.markAuthFailedIfNeeded(err)
 			default:
 				if rateLimited {
@@ -77,10 +69,8 @@ func (c *Channel) runPollLoop(parentCtx context.Context) {
 	}
 }
 
-// flushCursor persists the cursor under the `poll_cursor` config key via a
-// SQL-level JSONB merge. This avoids the read-modify-write race where an
-// operator's UI update of a sibling key (e.g. dm_policy) lands between a
-// Get and Update and gets clobbered by the cursor write.
+// flushCursor persists the cursor via SQL JSONB merge so a sibling-key
+// update from the UI (e.g. dm_policy) isn't clobbered by a read-modify-write.
 func (c *Channel) flushCursor(ctx context.Context) error {
 	if c.ciStore == nil || c.instanceID == [16]byte{} {
 		return errors.New("zalo_oa: cursor flush without store/instance ID")
@@ -93,8 +83,7 @@ func (c *Channel) flushCursor(ctx context.Context) error {
 	return nil
 }
 
-// flushCursorOnExit is best-effort cursor persistence at Stop. Errors
-// are logged but do not block shutdown.
+// flushCursorOnExit is best-effort persistence at Stop.
 func (c *Channel) flushCursorOnExit(parentCtx context.Context) {
 	if !c.cursor.IsDirty() {
 		return

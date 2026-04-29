@@ -12,10 +12,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// Factory returns a channels.ChannelFactory closure that captures the
-// store dependency. Webhook-mode channels register with
-// common.SharedRouter() at Start(); tests inject an isolated router via
-// direct field assignment (white-box, same package).
+// Factory returns a channels.ChannelFactory closure capturing the store.
+// Webhook-mode channels register with common.SharedRouter() at Start().
 func Factory(ciStore store.ChannelInstanceStore) channels.ChannelFactory {
 	return func(name string, credsRaw json.RawMessage, cfgRaw json.RawMessage,
 		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
@@ -41,8 +39,7 @@ func Factory(ciStore store.ChannelInstanceStore) channels.ChannelFactory {
 			return nil, err
 		}
 		ch.webhookRouter = common.SharedRouter()
-		// Seed the in-memory poll cursor from any persisted state in
-		// channel_instances.config.poll_cursor (phase-04 persistence).
+		// Seed cursor from persisted channel_instances.config.poll_cursor.
 		if seeded := parseCursorFromConfig(cfgRaw); len(seeded) > 0 {
 			ch.cursor.loadFromMap(seeded)
 		}

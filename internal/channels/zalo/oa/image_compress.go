@@ -13,32 +13,20 @@ import (
 	_ "golang.org/x/image/webp" // register WebP decoder
 )
 
-// Zalo OA's /v2.0/oa/upload/image endpoint hard-rejects payloads over
-// 1MB (error -210). AI-generated PNGs routinely exceed that, so on the
-// outbound path we attempt a resize + JPEG re-encode before giving up.
-//
-// Strategy: scale the longest side down progressively, then loop JPEG
-// quality 85→35 at each size. Returns the first encoding that fits.
+// Zalo OA /v2.0/oa/upload/image rejects payloads over 1MB (error -210).
+// Strategy: scale longest side down, loop JPEG quality 85→35 at each size.
 
 var (
 	jpegQualityLadder = []int{85, 75, 65, 55, 45, 35}
 	maxSideLadder     = []int{1600, 1200, 900, 600}
 )
 
-// maxDecodePixels caps the W*H product before image.Decode allocates a
-// pixel buffer. A 25M-pixel limit (≈5000×5000) covers any legitimate
-// chat-image; rejecting larger inputs prevents a malicious caller from
-// using a small payload (e.g. a 1MB PNG with 30000×30000 dimensions) to
-// pin a multi-GB RGBA buffer in memory.
+// maxDecodePixels caps W*H to bound the RGBA buffer image.Decode allocates,
+// preventing a small payload with huge dimensions from pinning GB of memory.
 const maxDecodePixels = 25_000_000
 
-// compressForZaloImage takes raw image bytes of any format and tries to
-// produce an output under maxBytes. Returns the compressed bytes and the
-// resulting MIME type on success; returns the original bytes + MIME
-// unchanged when they already fit. Never silently upscales or discards
-// the original. Transparent images route through PNG re-encode (with
-// palette quantization fallback) instead of JPEG, otherwise alpha pixels
-// flatten to black backgrounds.
+// compressForZaloImage shrinks oversized images under maxBytes. Transparent
+// inputs route to PNG re-encode (JPEG would flatten alpha to black).
 func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byte, string, error) {
 	if len(data) <= maxBytes {
 		return data, originalMIME, nil
@@ -89,26 +77,20 @@ func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byt
 				return buf.Bytes(), "image/jpeg", nil
 			}
 		}
-		// If even lowest quality at this side is still too big, shrink further.
 	}
 	return nil, "", fmt.Errorf("zalo_oa: image cannot fit under %d bytes (%dx%d original %d bytes)",
 		maxBytes, origW, origH, len(data))
 }
 
-// hasTransparency reports whether the image's color model carries an alpha
-// channel AND any pixel is actually non-opaque. Cheap up-front check; for
-// very large images we only sample the corners and a stride.
+// hasTransparency reports whether any pixel is non-opaque. Samples four
+// corners + a stride; corners catch the far-edge case strides can miss.
 func hasTransparency(img image.Image) bool {
 	switch img.ColorModel() {
 	case color.RGBAModel, color.NRGBAModel, color.RGBA64Model, color.NRGBA64Model, color.AlphaModel, color.Alpha16Model:
-		// proceed to per-pixel sample
 	default:
 		return false
 	}
 	b := img.Bounds()
-	// Always check the four corners — strided sampling can miss the
-	// far edge when (max-1) isn't on the stride grid (e.g. 130×130 with
-	// step=2 misses x=129/y=129).
 	corners := [4][2]int{
 		{b.Min.X, b.Min.Y},
 		{b.Max.X - 1, b.Min.Y},
@@ -134,9 +116,8 @@ func hasTransparency(img image.Image) bool {
 	return false
 }
 
-// compressTransparent shrinks the longest side until the PNG encoding fits
-// under maxBytes, preserving alpha. PNG can't trade quality for size like
-// JPEG, so the only knob is dimensions.
+// compressTransparent shrinks the longest side until the PNG fits under
+// maxBytes (PNG has no quality knob; only dimensions).
 func compressTransparent(img image.Image, _ string, maxBytes int) ([]byte, string, error) {
 	bounds := img.Bounds()
 	origW, origH := bounds.Dx(), bounds.Dy()

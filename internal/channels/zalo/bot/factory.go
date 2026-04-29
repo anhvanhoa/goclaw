@@ -11,13 +11,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// zaloCreds maps the credentials JSON from the channel_instances table.
 type zaloCreds struct {
 	Token         string `json:"token"`
 	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
-// zaloInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type zaloInstanceConfig struct {
 	DMPolicy   string   `json:"dm_policy,omitempty"`
 	Transport  string   `json:"transport,omitempty"`
@@ -27,10 +25,8 @@ type zaloInstanceConfig struct {
 	BlockReply *bool    `json:"block_reply,omitempty"`
 }
 
-// Factory creates a Zalo Bot channel from DB instance data. Webhook-mode
-// channels register with common.SharedRouter() at Start(); tests inject
-// an isolated router via direct field assignment (white-box, same
-// package).
+// Factory creates a Zalo Bot channel from channel_instances data.
+// Webhook-mode channels register with common.SharedRouter() at Start().
 func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
 

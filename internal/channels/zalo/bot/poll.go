@@ -81,7 +81,6 @@ func (c *Channel) handleTextMessage(msg *zaloMessage) {
 		chatID = senderID
 	}
 
-	// DM policy enforcement (Zalo is DM-only)
 	if !c.checkDMPolicy(ctx, senderID, chatID) {
 		return
 	}
@@ -128,7 +127,7 @@ func (c *Channel) handleImageMessage(msg *zaloMessage) {
 		content = "[image]"
 	}
 
-	// Download photo from Zalo CDN to local temp file (CDN URLs are auth-restricted/expiring)
+	// Zalo CDN URLs are auth-restricted/expiring; download to local temp.
 	var media []string
 	var photoURL string
 	switch {

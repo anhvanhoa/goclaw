@@ -1,9 +1,6 @@
-// Package bot implements the Zalo Bot channel (static-token variant,
-// distinct from the OAuth-backed Official Account in ../oa).
-// Ported from OpenClaw TS extensions/zalo/.
-//
-// Zalo Bot API: https://bot-api.zaloplatforms.com
-// DM only (no groups), text limit 2000 chars, polling + webhook modes.
+// Package bot implements the Zalo Bot channel (static-token variant).
+// API: https://bot-api.zaloplatforms.com
+// DM only, text limit 2000 chars, polling + webhook modes.
 package bot
 
 import (
@@ -30,7 +27,7 @@ const (
 	pairingDebounce   = 60 * time.Second
 )
 
-// Channel connects to the Zalo OA Bot API.
+// Channel connects to the Zalo Bot API.
 type Channel struct {
 	*channels.BaseChannel
 	token      string
@@ -40,44 +37,31 @@ type Channel struct {
 	stopCh     chan struct{}
 	client     *http.Client
 	pollClient *http.Client
-	// pairingService, pairingDebounce are inherited from channels.BaseChannel.
 
-	transport     string    // "polling" (default) | "webhook"
-	webhookSecret string    // guards X-Bot-Api-Secret-Token in webhook mode
-	botID         string    // captured from getMe at Start; A8 self-echo filter
-	instanceID    uuid.UUID // injected via SetInstanceID after construction
+	transport     string // "polling" (default) | "webhook"
+	webhookSecret string // guards X-Bot-Api-Secret-Token in webhook mode
+	botID         string // from getMe; used to filter self-echoes
+	instanceID    uuid.UUID
 
-	// webhookRouter is set by Factory to common.SharedRouter(); tests
-	// assign an isolated NewRouter() via white-box (same-package) field
-	// access. Used to register/unregister this instance when
-	// transport == "webhook".
 	webhookRouter *common.Router
 
-	// legacyPhotoSentinelWarn fires once if any caller still emits the
+	// legacyPhotoSentinelWarn fires once if a caller still emits the
 	// deprecated [photo:URL] sentinel after the Media[] migration.
 	legacyPhotoSentinelWarn sync.Once
 }
 
-// SetInstanceID is called by InstanceLoader after construction so the
-// channel can register itself with the shared webhook router under its
-// per-row UUID.
 func (c *Channel) SetInstanceID(id uuid.UUID) { c.instanceID = id }
 
-// Compile-time guard: bot.Channel must satisfy channels.WebhookChannel.
 var _ channels.WebhookChannel = (*Channel)(nil)
 
-// WebhookHandler implements channels.WebhookChannel. Both bot and oa
-// channel families call SharedRouter().MountRoute() — first caller wins
-// the (path, router) tuple, subsequent callers get ("", nil). The
-// per-instance dispatch is keyed off the `?instance=<uuid>` query
-// param. No transport gate: polling-mode rows also surface the route
-// (matches facebook/pancake; the route returns 404 for unregistered
-// instances).
+// WebhookHandler returns (path, handler) on the first caller across the
+// shared router; subsequent calls return ("", nil). Per-instance dispatch
+// is keyed off the ?instance=<uuid> query param.
 func (c *Channel) WebhookHandler() (string, http.Handler) {
 	return common.SharedRouter().MountRoute()
 }
 
-// New creates a new Zalo channel.
+// New creates a Zalo Bot channel.
 func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore) (*Channel, error) {
 	if cfg.Token == "" {
 		return nil, fmt.Errorf("zalo token is required")
@@ -88,7 +72,7 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 
 	dmPolicy := cfg.DMPolicy
 	if dmPolicy == "" {
-		dmPolicy = "pairing" // TS default
+		dmPolicy = "pairing"
 	}
 
 	mediaMax := cfg.MediaMaxMB
@@ -117,16 +101,12 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 	return ch, nil
 }
 
-// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+// BlockReplyEnabled returns the per-channel block_reply override
+// (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.blockReply }
 
-// Start begins listening for Zalo updates. Behavior depends on transport:
-//
-//	"polling" (default): launch the long-poll loop against getUpdates.
-//	"webhook":           register with the shared common.Router so Zalo's
-//	                     POST /channels/zalo/webhook?instance=<uuid>
-//	                     dispatches into HandleWebhookEvent. The poll loop
-//	                     never starts.
+// Start begins listening. polling: long-poll getUpdates.
+// webhook: register with common.Router; HandleWebhookEvent dispatches.
 func (c *Channel) Start(ctx context.Context) error {
 	info, err := c.getMe()
 	if err != nil {
@@ -156,9 +136,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop shuts down the Zalo bot. Webhook mode unregisters from the shared
-// router so subsequent requests get a clean 404 instead of dispatching to
-// a stopped channel.
+// Stop shuts down the bot; webhook mode unregisters from the shared router.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping zalo bot", "transport", c.transport)
 	if c.transport == "webhook" && c.webhookRouter != nil {
@@ -169,17 +147,15 @@ func (c *Channel) Stop(_ context.Context) error {
 	return nil
 }
 
-// Send delivers an outbound message to a Zalo chat.
+// Send delivers an outbound message.
 func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("zalo bot not running")
 	}
 
-	// Strip markdown — Zalo does not support any markup rendering.
+	// Zalo Bot doesn't render markup.
 	msg.Content = StripMarkdown(msg.Content)
 
-	// Defensive: warn if any caller still emits the legacy [photo:URL] sentinel
-	// after the migration. Logged once per process to avoid log spam.
 	if strings.Contains(msg.Content, "[photo:") {
 		c.legacyPhotoSentinelWarn.Do(func() {
 			slog.Warn("zalo_bot.send.legacy_photo_sentinel_detected",

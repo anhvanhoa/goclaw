@@ -11,26 +11,17 @@ import (
 	"time"
 )
 
-// ErrAuthExpired indicates the refresh token is no longer valid (single-use
-// rotation burned, or operator revoked the OA permission). Caller must
-// surface this to the operator and block further refreshes until re-auth.
+// ErrAuthExpired: refresh token rejected (single-use rotation burned or
+// operator revoked OA permission). Operator must re-consent.
 var ErrAuthExpired = errors.New("zalo_oa: refresh token expired, re-auth required")
 
-// ErrNotAuthorized indicates the channel has not yet completed the
-// paste-code consent flow (no refresh token persisted). Distinct from
-// ErrAuthExpired: this is a "not started" state, not a failure — health
-// reporting should stay Degraded (awaiting consent), not Failed.
+// ErrNotAuthorized: channel has not yet completed the paste-code consent
+// flow. Health stays Degraded (not Failed).
 var ErrNotAuthorized = errors.New("zalo_oa: not yet authorized (paste consent code first)")
 
-// classifyRefreshError maps a refresh-call error to either ErrAuthExpired
-// (final, requires operator action) or returns the original error (transient,
-// safe to retry on the next ticker cycle).
-//
-// Match is conservative: only the OAuth-standard "invalid_grant" token or
-// the literal "expired" word in the Zalo envelope escalates to ErrAuthExpired.
-// Generic words like "invalid app_id" or "invalid parameter" stay transient
-// (those would mean operator misconfiguration, not refresh-token death — we
-// don't want one bad config push to permanently sideline the channel).
+// classifyRefreshError escalates to ErrAuthExpired only on "invalid_grant"
+// or "expired" — generic config errors stay transient so a bad config push
+// doesn't permanently sideline the channel.
 func classifyRefreshError(err error) error {
 	if err == nil {
 		return nil
@@ -52,19 +43,14 @@ type Tokens struct {
 	ExpiresAt    time.Time
 }
 
-// tokenResponse mirrors Zalo's OAuth v4 response body. Unknown fields
-// are tolerated (forward-compat). expires_in has been observed as both
-// a number AND a quoted string ("3600") depending on the endpoint, so
-// we use flexSeconds to accept either.
 type tokenResponse struct {
 	AccessToken  string      `json:"access_token"`
 	RefreshToken string      `json:"refresh_token"`
 	ExpiresIn    flexSeconds `json:"expires_in"`
 }
 
-// flexSeconds accepts either a JSON number (3600) or a JSON string ("3600").
-// Zalo's OA OAuth endpoint returns the latter form in practice, even though
-// the ChickenAI SDK types it as a number — belt-and-suspenders.
+// flexSeconds accepts either a JSON number or a quoted string for
+// expires_in — Zalo's OA OAuth endpoint returns the latter in practice.
 type flexSeconds int64
 
 func (f *flexSeconds) UnmarshalJSON(b []byte) error {
@@ -80,8 +66,8 @@ func (f *flexSeconds) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ExchangeCode swaps an authorization code for an (access, refresh) token pair.
-// POST oauth.zaloapp.com/v4/oa/access_token, secret_key in HEADER (not body).
+// ExchangeCode swaps an authorization code for an (access, refresh) pair.
+// POST oauth.zaloapp.com/v4/oa/access_token, secret_key in HEADER.
 func (c *Client) ExchangeCode(ctx context.Context, appID, secretKey, code string) (*Tokens, error) {
 	form := url.Values{
 		"app_id":     {appID},
@@ -123,9 +109,8 @@ func (c *Client) tokenCall(ctx context.Context, secretKey string, form url.Value
 	}, nil
 }
 
-// ConsentURL builds the redirect URL the operator visits to authorize the OA.
-// Returned URL embeds the supplied state token for CSRF protection (validated
-// in the WS exchange_code handler).
+// ConsentURL builds the redirect URL the operator visits to authorize
+// the OA. The state token is validated in the WS exchange_code handler.
 func ConsentURL(appID, redirectURI, state string) string {
 	q := url.Values{
 		"app_id":       {appID},

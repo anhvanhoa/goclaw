@@ -23,20 +23,16 @@ import (
 )
 
 // ErrPartialSend signals that an attachment was delivered but the trailing
-// caption/text message failed. The attachment-side message_id is logged
-// alongside the warning; callers may use errors.Is to special-case retry.
+// caption/text message failed. Callers may use errors.Is to special-case retry.
 var ErrPartialSend = errors.New("zalo_oa: attachment delivered but trailing text failed")
 
 const (
 	defaultClientTimeout        = 15 * time.Second
 	defaultSafetyTickerInterval = 30 * time.Minute
 )
-// Per-endpoint upload caps (Zalo OA): image 1MB, file 5MB, gif 5MB.
-// These are hard-enforced by Zalo's own endpoints (error -210). Defined
-// inline at the single callsite in (*Channel).dispatch — see channel.go
-// around the dispatch branch.
 
-// Channel is the phase-02 form. Phase 03 wires Send; phase 04 wires polling.
+// Channel is the Zalo OA channel. Upload caps enforced by Zalo (error -210):
+// image 1MB, file 5MB, gif 5MB.
 type Channel struct {
 	*channels.BaseChannel
 
@@ -45,35 +41,26 @@ type Channel struct {
 	ciStore store.ChannelInstanceStore
 	cfg     config.ZaloOAConfig
 
-	// instanceID is injected by InstanceLoader via SetInstanceID after construction
-	// (ChannelFactory signature doesn't expose it).
 	instanceID uuid.UUID
 
 	tokens *tokenSource
 
-	// Polling state (phase 04).
 	cursor       *pollCursor
 	seenIDs      *seenMessageIDs // dedup fallback for messages with time == 0
 	pollInterval time.Duration
 	pollWG       sync.WaitGroup
 
-	// safetyTickerInterval is exposed for tests; production uses defaultSafetyTickerInterval
-	// or cfg.SafetyTickerMinutes.
 	safetyTickerInterval time.Duration
 
-	stopOnce   sync.Once
-	stopCh     chan struct{}
-	tickerWG   sync.WaitGroup
-	catchUpWG  sync.WaitGroup // tracks the optional webhook catch-up goroutine (N2)
+	stopOnce  sync.Once
+	stopCh    chan struct{}
+	tickerWG  sync.WaitGroup
+	catchUpWG sync.WaitGroup
 
-	// webhookRouter is the shared Zalo router for the gateway. Set by
-	// Factory to common.SharedRouter(); tests assign an isolated
-	// NewRouter() via white-box (same-package) field access for
-	// parallel-test isolation.
 	webhookRouter *common.Router
 }
 
-// New constructs the channel. InstanceLoader calls SetInstanceID after this.
+// New constructs the channel. InstanceLoader calls SetInstanceID after.
 func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 	ciStore store.ChannelInstanceStore, msgBus *bus.MessageBus, _ store.PairingStore) (*Channel, error) {
 
@@ -104,16 +91,12 @@ func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 	return c, nil
 }
 
-// SetInstanceID is called by InstanceLoader after construction. The instance
-// ID is needed by the token-refresh path to write back rotated credentials.
 func (c *Channel) SetInstanceID(id uuid.UUID) {
 	c.instanceID = id
 	c.tokens.instanceID = id
 }
 
-// SetTestEndpointsForTest overrides the OAuth + API hosts. ONLY for use by
-// integration tests that drive the channel against an httptest server.
-// Production code paths construct the Client with default endpoints.
+// SetTestEndpointsForTest overrides the OAuth + API hosts for integration tests.
 func (c *Channel) SetTestEndpointsForTest(oauthBase, apiBase string) {
 	if oauthBase != "" {
 		c.client.oauthBase = oauthBase
@@ -123,43 +106,32 @@ func (c *Channel) SetTestEndpointsForTest(oauthBase, apiBase string) {
 	}
 }
 
-// ForceRefreshForTest exposes tokenSource.ForceRefresh for integration tests
-// that need to bypass the in-memory cache and hit the upstream refresh path.
+// ForceRefreshForTest exposes tokenSource.ForceRefresh for integration tests.
 func (c *Channel) ForceRefreshForTest() {
 	c.tokens.ForceRefresh()
 }
 
-// Type returns the channel type identifier.
 func (c *Channel) Type() string { return channels.TypeZaloOA }
 
-// Compile-time guard: oa.Channel must satisfy channels.WebhookChannel.
 var _ channels.WebhookChannel = (*Channel)(nil)
 
-// WebhookHandler implements channels.WebhookChannel. Both bot and oa
-// channel families call SharedRouter().MountRoute() — first caller wins
-// the (path, router) tuple, subsequent callers get ("", nil). The
-// per-instance dispatch is keyed off the `?instance=<uuid>` query
-// param. No transport gate: polling-mode rows also surface the route
-// (matches facebook/pancake; the route returns 404 for unregistered
-// instances).
+// WebhookHandler returns (path, handler) on the first caller across the
+// shared router; subsequent calls return ("", nil). Per-instance dispatch
+// is keyed off the ?instance=<uuid> query param.
 func (c *Channel) WebhookHandler() (string, http.Handler) {
 	return common.SharedRouter().MountRoute()
 }
 
-// Start brings the channel up. The safety ticker always runs (token
-// refresh is needed in either transport). Inbound delivery branches on
-// cfg.Transport: "polling" (default) starts the poll loop; "webhook"
-// registers the channel with the shared router and optionally fires a
-// catch-up sweep for messages missed during downtime.
+// Start brings the channel up. Safety ticker always runs. Transport
+// "polling" (default) starts the poll loop; "webhook" registers with the
+// shared router and optionally fires a catch-up sweep.
 func (c *Channel) Start(_ context.Context) error {
 	c.SetRunning(true)
 	if c.creds.OAID == "" {
 		slog.Info("zalo_oa.started", "state", "unauthorized", "name", c.Name())
 		c.MarkDegraded("awaiting consent", "no oa_id yet — paste consent code to authorize",
 			channels.ChannelFailureKindAuth, true)
-		// Pre-consent stub: only run the safety ticker so a future refresh
-		// cycle picks up tokens once the operator pastes the code. Skip
-		// transport wiring entirely — there is nothing to poll or receive yet.
+		// Pre-consent: only run safety ticker; nothing to poll or receive.
 		c.tickerWG.Add(1)
 		go c.runSafetyTicker()
 		return nil
@@ -177,9 +149,8 @@ func (c *Channel) Start(_ context.Context) error {
 		return c.startWebhookTransport()
 	case "polling":
 		c.pollWG.Add(1)
-		// Use Background so the loop survives the caller's ctx cancel; Stop()
-		// is the canonical exit signal. The loop wraps each cycle in a per-tick
-		// ctx so individual API calls still honor a timeout.
+		// Background ctx so the loop survives the caller's ctx cancel; Stop()
+		// is the canonical exit signal. Each cycle uses its own per-tick ctx.
 		go c.runPollLoop(context.Background())
 		slog.Info("zalo_oa.started", "state", "connected", "oa_id", c.creds.OAID, "transport", "polling", "name", c.Name())
 		c.MarkHealthy("connected")
@@ -192,10 +163,8 @@ func (c *Channel) Start(_ context.Context) error {
 	return nil
 }
 
-// Stop signals ticker, poll loop, and any in-flight webhook catch-up
-// sweep to exit and waits for them. Webhook teardown unregisters from the
-// shared router — calling on a non-registered instance is a no-op.
-// Best-effort cursor flush happens inside runPollLoop's exit path.
+// Stop signals ticker, poll loop, and any in-flight catch-up sweep to
+// exit and waits. Webhook teardown unregisters from the shared router.
 // Idempotent.
 func (c *Channel) Stop(_ context.Context) error {
 	c.stopOnce.Do(func() { close(c.stopCh) })
@@ -210,15 +179,11 @@ func (c *Channel) Stop(_ context.Context) error {
 	return nil
 }
 
-// Send dispatches an outbound message to text / image / file based on the
-// Media slice. Phase 03 supports one media element per message; additional
-// media in the slice are logged-and-skipped (Zalo OA sends one attachment
-// per message). The Media URL is treated as a local file path.
-//
-// Caption + Content alongside an attachment ride as a SEPARATE text message
-// (Zalo OA's attachment payload has no caption field). If that trailing
-// text fails after the attachment succeeded, returns ErrPartialSend so
-// callers can distinguish from a full failure.
+// Send dispatches text / image / file based on the Media slice. Zalo OA
+// sends one attachment per message; extra Media entries are skipped.
+// Caption + Content ride as a separate trailing text message (Zalo OA's
+// attachment payload has no caption field). Returns ErrPartialSend if
+// the attachment succeeded but the trailing text failed.
 func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if msg.ChatID == "" {
 		return errors.New("zalo_oa: empty user_id")
@@ -234,9 +199,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	m := msg.Media[0]
-	// Generous stat-first guard (50MB) prevents OOM on pathological paths.
-	// Per-type caps are enforced below: image auto-compresses to 1MB,
-	// file rejects if MIME isn't PDF/DOC/DOCX or >5MB.
+	// 50MB stat-first guard prevents OOM; per-type caps enforced below.
 	data, mt, err := c.readMedia(m, 50*1024*1024)
 	if err != nil {
 		return err
@@ -244,16 +207,14 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	var attachMID string
 	if mt == "image/gif" {
-		// Zalo has a dedicated /upload/gif endpoint (cap 5MB) that
-		// preserves animation. Don't re-encode GIFs as JPEG.
+		// Dedicated /upload/gif endpoint (5MB cap) preserves animation.
 		const zaloGIFCapBytes = 5 * 1024 * 1024
 		if len(data) > zaloGIFCapBytes {
 			return fmt.Errorf("zalo_oa: gif too large: %d bytes (Zalo cap is 5MB)", len(data))
 		}
 		attachMID, err = c.SendGIF(ctx, msg.ChatID, data)
 	} else if strings.HasPrefix(mt, "image/") {
-		// Zalo upload/image caps at 1MB and only accepts jpg/png.
-		// Auto-compress oversized or non-jpg/png images to JPEG.
+		// /upload/image caps at 1MB, jpg/png only. Auto-compress to JPEG.
 		const zaloImageCapBytes = 1 * 1024 * 1024
 		compressed, newMT, cerr := compressForZaloImage(data, mt, zaloImageCapBytes)
 		if cerr != nil {
@@ -262,7 +223,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		data, mt = compressed, newMT
 		attachMID, err = c.SendImage(ctx, msg.ChatID, data, mt)
 	} else {
-		// Zalo upload/file only accepts PDF/DOC/DOCX up to 5MB.
+		// /upload/file accepts PDF/DOC/DOCX up to 5MB.
 		const zaloFileCapBytes = 5 * 1024 * 1024
 		if !isZaloSupportedFileMIME(mt) {
 			return fmt.Errorf("zalo_oa: file MIME %q not supported (Zalo accepts PDF, DOC, DOCX only)", mt)
@@ -289,9 +250,8 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	return nil
 }
 
-// mergeTrailingText joins caption + content for the post-attachment text
-// message. Each is trimmed; empties are skipped; both present are joined
-// with a blank line so the caption stands as its own paragraph.
+// mergeTrailingText joins caption + content for the post-attachment text.
+// Both present → joined with a blank line.
 func mergeTrailingText(caption, content string) string {
 	caption = strings.TrimSpace(caption)
 	content = strings.TrimSpace(content)
@@ -307,9 +267,7 @@ func mergeTrailingText(caption, content string) string {
 	}
 }
 
-// readMedia stat-checks the file BEFORE allocating, then reads bytes. The
-// stat-first pattern (mirrors telegram/send.go:399) prevents a 2GB malicious
-// path from OOMing the process before the size guard rejects it.
+// readMedia stat-checks before allocating to bound memory on large paths.
 func (c *Channel) readMedia(m bus.MediaAttachment, maxBytes int64) ([]byte, string, error) {
 	if m.URL == "" {
 		return nil, "", errors.New("zalo_oa: media URL empty")
@@ -334,9 +292,8 @@ func (c *Channel) readMedia(m bus.MediaAttachment, maxBytes int64) ([]byte, stri
 	return data, mt, nil
 }
 
-// runSafetyTicker calls Access() periodically so idle channels don't let
-// the refresh-token rotation window lapse silently. Skips work if the
-// channel is already in auth-failed state to avoid log spam.
+// runSafetyTicker calls Access() periodically so idle channels don't
+// let the refresh-token rotation window lapse silently.
 func (c *Channel) runSafetyTicker() {
 	defer c.tickerWG.Done()
 
@@ -351,13 +308,8 @@ func (c *Channel) runSafetyTicker() {
 			if c.skipTickIfAuthFailed() {
 				continue
 			}
-			// Access() does its own under-mutex check for refreshMargin —
-			// we deliberately don't pre-read creds.ExpiresAt here to avoid
-			// racing with concurrent refresh writes from Send (phase 03+).
-			// Tenant ID is propagated so the eventual store.Update() inside
-			// Persist sees the correct scope (defense-in-depth — store.Update
-			// is keyed by id but downstream cache/event listeners may scope
-			// by tenant).
+			// TenantID propagated so downstream listeners scoped by tenant
+			// see the right scope.
 			ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), c.TenantID()), 30*time.Second)
 			if _, err := c.tokens.Access(ctx); err != nil && !errors.Is(err, ErrNotAuthorized) {
 				c.markAuthFailedIfNeeded(err)
@@ -368,26 +320,17 @@ func (c *Channel) runSafetyTicker() {
 	}
 }
 
-// skipTickIfAuthFailed avoids re-attempting refresh once the channel is in
-// permanent auth-failed state (operator must re-auth).
 func (c *Channel) skipTickIfAuthFailed() bool {
 	snap := c.HealthSnapshot()
 	return snap.State == channels.ChannelHealthStateFailed && snap.FailureKind == channels.ChannelFailureKindAuth
 }
 
-// markAuthFailedIfNeeded transitions health to Failed/Auth on any auth-
-// class error. Two shapes qualify:
+// markAuthFailedIfNeeded transitions health to Failed/Auth on:
+//   - ErrAuthExpired: refresh token rejected (refresh-token dead).
+//   - *APIError isAuth(): access_token rejected after the retry-once
+//     ForceRefresh attempt (OA-app association broken; operator must re-consent).
 //
-//   - ErrAuthExpired: raised by the tokenSource refresh path when Zalo
-//     rejects the refresh token itself (refresh-token dead).
-//   - *APIError where isAuth() is true: raised by the poll path when
-//     a listrecentchat call 401/-216s AFTER the retry-once-on-auth
-//     ForceRefresh attempt. At that point the refresh token is likely
-//     still valid but the OA-app association is broken and the operator
-//     must re-consent.
-//
-// ErrNotAuthorized (pre-consent stub state) is intentionally NOT
-// escalated — the safety ticker already skips that case.
+// ErrNotAuthorized (pre-consent) is NOT escalated.
 func (c *Channel) markAuthFailedIfNeeded(err error) {
 	if err == nil {
 		return
@@ -410,7 +353,6 @@ func (c *Channel) markAuthFailedIfNeeded(err error) {
 	}
 }
 
-// tickerInterval clamps the ticker to a sane range.
 func tickerInterval(cfgMinutes int) time.Duration {
 	switch {
 	case cfgMinutes < 5:

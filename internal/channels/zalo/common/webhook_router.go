@@ -17,13 +17,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/safego"
 )
 
-// Router dispatches webhook POSTs to a registered Zalo channel instance.
-// A process-global Router (see shared.go) is mounted on the mux at
-// WebhookPath via the generic channels.WebhookChannel iteration; both
-// bot.Channel and oa.Channel implement WebhookChannel and call
-// SharedRouter().MountRoute() — the routeHandled flag in MountRoute
-// guarantees a single mount across both channel families. Channels
-// register themselves per-instance at Start() and unregister at Stop().
+// Router dispatches webhook POSTs to registered Zalo channel instances.
+// Channels register at Start() and unregister at Stop(); the process-global
+// router (shared.go) is mounted once on the mux via MountRoute().
 type Router struct {
 	mu          sync.RWMutex
 	instances   map[uuid.UUID]*registeredInstance
@@ -31,19 +27,13 @@ type Router struct {
 	rateLimiter *channels.WebhookRateLimiter
 	maxBodySize int64
 
-	// routeMu guards routeHandled. Separate from `mu` (which guards the
-	// hot-path instance map) because MountRoute is called once per channel
-	// at boot — no need to contend with ServeHTTP's RLock pattern.
 	routeMu      sync.Mutex
 	routeHandled bool
 }
 
-// MountRoute returns (WebhookPath, r) on the first call and ("", nil) on
-// every subsequent call. Pattern mirrors facebook/webhook_router.go and
-// pancake/webhook_handler.go. The routeHandled flag is sticky across
-// instance_loader.Reload — http.ServeMux retains the route across the
-// instance lifecycle, so re-mounting would panic with "multiple
-// registrations".
+// MountRoute returns (WebhookPath, r) on the first call across the shared
+// router and ("", nil) afterwards. Sticky across instance_loader.Reload
+// because http.ServeMux would panic on re-mount.
 func (r *Router) MountRoute() (string, http.Handler) {
 	r.routeMu.Lock()
 	defer r.routeMu.Unlock()
@@ -54,52 +44,42 @@ func (r *Router) MountRoute() (string, http.Handler) {
 	return "", nil
 }
 
-// emptyIDStreakWarnThreshold is the consecutive count of empty
-// ExtractMessageID() returns that triggers a single warn-level log. R3-2:
-// catches Zalo schema drift where the extractor silently disables dedup.
+// emptyIDStreakWarnThreshold catches schema drift where the extractor
+// silently disables dedup by always returning empty.
 const emptyIDStreakWarnThreshold = 10
 
 type registeredInstance struct {
 	handler  WebhookHandler
 	tenantID uuid.UUID
 
-	// ctx is the per-instance dispatch context; cancelled in
-	// UnregisterInstance so in-flight HandleWebhookEvent goroutines bail
-	// promptly during channel Stop (R3-3).
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// emptyIDStreak counts consecutive empty ExtractMessageID() returns.
-	// Reset on any non-empty extraction. Warn fires once per threshold
-	// crossing — see emptyIDStreakWarnThreshold (R3-2).
+	// emptyIDStreak counts consecutive empty extractor returns; resets on
+	// any non-empty extraction.
 	emptyIDStreak atomic.Int64
 }
 
-// WebhookHandler is the per-channel-instance contract the router invokes
-// after rate limit / signature / dedup checks pass. The handler decides
-// what the parsed event means; the router knows nothing about Zalo
-// payload shapes.
+// WebhookHandler is the per-instance contract the router invokes after
+// rate limit / signature / dedup checks pass.
 type WebhookHandler interface {
 	HandleWebhookEvent(ctx context.Context, raw json.RawMessage) error
 	SignatureVerifier() SignatureVerifier
 	MessageIDExtractor() MessageIDExtractor
 }
 
-// SignatureVerifier validates per-request authenticity. Bot uses a
-// header-token compare; OA uses HMAC-SHA256 over the body. Both are
-// expected to use crypto/subtle.ConstantTimeCompare under the hood.
+// SignatureVerifier validates per-request authenticity.
 type SignatureVerifier interface {
 	Verify(headers http.Header, body []byte) error
 }
 
-// MessageIDExtractor pulls the per-event id out of the raw body for
-// dedup. Returning "" means the router will not dedup this event.
+// MessageIDExtractor pulls the dedup id; "" disables dedup for the event.
 type MessageIDExtractor interface {
 	ExtractMessageID(raw json.RawMessage) string
 }
 
-// ErrSignatureMismatch is the canonical signal a verifier returns when
-// the request signature does not match. The router maps it to 401.
+// ErrSignatureMismatch is the canonical signature-mismatch error; the
+// router maps it to 401.
 var ErrSignatureMismatch = errors.New("zalo_common: webhook signature mismatch")
 
 const (
@@ -108,9 +88,7 @@ const (
 	defaultMaxBodyBytes = 1 * 1024 * 1024
 )
 
-// NewRouter returns a router with default dedup and rate-limit
-// parameters. Tests construct their own to keep state isolated (no
-// process-wide singleton).
+// NewRouter returns a router with default dedup and rate-limit params.
 func NewRouter() *Router {
 	return &Router{
 		instances:   make(map[uuid.UUID]*registeredInstance),
@@ -120,10 +98,8 @@ func NewRouter() *Router {
 	}
 }
 
-// RegisterInstance enrolls a channel for routing. tenantID is captured
-// at register time for defense-in-depth scoping in downstream handlers.
-// The per-instance ctx is cancelled when UnregisterInstance runs so any
-// in-flight HandleWebhookEvent dispatch can observe cancellation (R3-3).
+// RegisterInstance enrolls a channel for routing. The per-instance ctx
+// is cancelled by UnregisterInstance so dispatch goroutines bail promptly.
 func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.UUID) {
 	ctx, cancel := context.WithCancel(context.Background())
 	inst := &registeredInstance{
@@ -137,9 +113,8 @@ func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.
 	r.mu.Unlock()
 }
 
-// UnregisterInstance removes a channel from the routing table and
-// cancels its dispatch context so in-flight handlers exit promptly.
-// Idempotent — calling on an unregistered ID is a no-op.
+// UnregisterInstance removes the channel and cancels its dispatch ctx.
+// Idempotent.
 func (r *Router) UnregisterInstance(id uuid.UUID) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -157,11 +132,9 @@ func (r *Router) lookup(id uuid.UUID) (*registeredInstance, bool) {
 	return inst, ok
 }
 
-// ServeHTTP is the wire entry point. It always returns 200 once dispatch
-// reaches the handler — Zalo retries hard on non-2xx, so handler errors
-// are logged but not surfaced as HTTP failures. Pre-dispatch failures
-// (auth, parse, rate limit) are surfaced as 4xx so operators can see
-// real configuration problems.
+// ServeHTTP returns 200 once dispatch reaches the handler — Zalo retries
+// hard on non-2xx, so handler errors are logged, not surfaced. Pre-dispatch
+// failures (auth, rate limit, parse) return 4xx for operator visibility.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -203,9 +176,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	mid := inst.handler.MessageIDExtractor().ExtractMessageID(body)
 	if mid == "" {
-		// R3-2: increment streak; warn-and-reset at threshold so a silent
-		// schema drift (extractor returning "" for every event) doesn't go
-		// unnoticed. Reset-after-warn throttles to one warn per 10-event window.
+		// Warn-and-reset at threshold so silent schema drift doesn't go
+		// unnoticed; throttles to one warn per threshold-event window.
 		n := inst.emptyIDStreak.Add(1)
 		if n >= emptyIDStreakWarnThreshold {
 			inst.emptyIDStreak.Store(0)
@@ -226,11 +198,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// dispatch invokes the handler in a goroutine so the HTTP response is
-// not blocked by per-event work (Zalo expects ack within ~2s). Panics
-// inside the handler are caught by safego.Recover and logged. The
-// per-instance ctx is cancelled by UnregisterInstance so a long-running
-// handler bails fast when the channel stops (R3-3).
+// dispatch runs the handler in a goroutine so the HTTP ack isn't blocked
+// (Zalo expects ack within ~2s). Panics are recovered and logged.
 func (r *Router) dispatch(instanceID uuid.UUID, inst *registeredInstance, body []byte) {
 	defer safego.Recover(nil, "instance_id", instanceID, "tenant_id", inst.tenantID)
 	if err := inst.handler.HandleWebhookEvent(inst.ctx, body); err != nil {

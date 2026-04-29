@@ -1,6 +1,5 @@
 // Package common holds shared building blocks used by both Zalo channel
-// flavors (zalo_bot and zalo_oa). Anything that is *not* genuinely shared
-// (HTTP API clients, send pipelines, auth) stays in the per-channel package.
+// flavors (zalo_bot and zalo_oa).
 package common
 
 import (
@@ -8,8 +7,8 @@ import (
 	"strings"
 )
 
-// StripMarkdown removes markdown formatting artifacts from text, producing
-// clean plain text suitable for Zalo which does not support any markup.
+// StripMarkdown returns plain text with markdown artifacts removed —
+// Zalo does not support any markup rendering.
 func StripMarkdown(text string) string {
 	if text == "" {
 		return text

@@ -16,20 +16,13 @@ import (
 	"time"
 )
 
-// traceEnvVar, when set to "1", enables slog.Debug dumps of raw response
-// bodies from every Zalo API call. Off by default. Response bodies may
-// contain PII (user display names, phone numbers, user IDs) — do NOT
-// enable in production without scrubbing review.
+// traceEnvVar=1 dumps raw Zalo response bodies via slog.Debug. Bodies
+// contain PII (display names, IDs, message text) — do not enable in
+// production without scrubbing review.
 const traceEnvVar = "GOCLAW_ZALO_OA_TRACE"
 
-// traceEnabled reports whether GOCLAW_ZALO_OA_TRACE is on for this process.
-// Cached at package init; flipping the env live requires restart.
 var traceEnabled = os.Getenv(traceEnvVar) == "1"
 
-// traceBodyMaxBytes caps the response body slice that lands in trace logs.
-// Bodies contain DM text + display names — full dumps land in log
-// aggregators and bloat retention; 256B is enough to read the envelope
-// (error code + first words of message) for debugging.
 const traceBodyMaxBytes = 256
 
 func truncateForTrace(b []byte) string {
@@ -39,9 +32,7 @@ func truncateForTrace(b []byte) string {
 	return string(b[:traceBodyMaxBytes]) + "…(truncated)"
 }
 
-// uploadTimeout is generous because multipart uploads of a few MB over a
-// mobile carrier can take longer than the default 15s API timeout.
-// Host bases + path constants live in endpoints.go.
+// uploadTimeout accommodates multi-MB multipart uploads over slow mobile carriers.
 const uploadTimeout = 60 * time.Second
 
 // Client wraps Zalo's OAuth + OpenAPI hosts.
@@ -51,13 +42,11 @@ type Client struct {
 	apiBase   string
 }
 
-// NewClient returns a Client with the given timeout. Transport is tuned
-// for Zalo OA's observed behavior: keep-alive reuse (default), but with
-// bounded idle-connection lifetime so stale connections don't sit around
-// and cause spurious "awaiting headers" timeouts on the next call.
+// NewClient returns a Client. Bounded idle-connection lifetime avoids
+// stale connections that cause "awaiting headers" timeouts on Zalo's hosts.
 func NewClient(timeout time.Duration) *Client {
 	if timeout <= 0 {
-		timeout = 30 * time.Second // Zalo sometimes takes 10-20s under load
+		timeout = 30 * time.Second
 	}
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
@@ -75,11 +64,10 @@ func NewClient(timeout time.Duration) *Client {
 	}
 }
 
-// ErrRateLimit indicates Zalo returned HTTP 429. Callers should back off
-// (the polling loop switches to a 30s ticker until a successful cycle).
+// ErrRateLimit signals HTTP 429; callers should back off.
 var ErrRateLimit = errors.New("zalo_oa: rate limited")
 
-// APIError is returned when Zalo replies with a non-zero error envelope.
+// APIError is Zalo's non-zero error envelope.
 type APIError struct {
 	Code    int    `json:"error"`
 	Message string `json:"message"`
@@ -89,10 +77,9 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("zalo api error %d: %s", e.Code, e.Message)
 }
 
-// isAuth reports whether this error indicates an invalid/expired access
-// token at the OpenAPI layer (distinct from refresh-token death — that's
-// classifyRefreshError's job). Code-based check plus a substring fallback
-// for documentation drift. Code values live in errors.go.
+// isAuth reports whether the error is an invalid/expired access_token at
+// the OpenAPI layer (refresh-token death is classifyRefreshError's job).
+// Codes in errors.go; substring fallback for doc drift.
 func (e *APIError) isAuth() bool {
 	if e == nil {
 		return false
@@ -104,10 +91,8 @@ func (e *APIError) isAuth() bool {
 	return strings.Contains(msg, "access_token") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "expired"))
 }
 
-// apiGet performs GET apiBase+path with extra query params merged. Token
-// rides in the `access_token` HEADER (the query-param form is NOT accepted
-// by Zalo OA OpenAPI in practice; live endpoints 404 on that style).
-// Surfaces 429 as ErrRateLimit so callers can switch into backoff.
+// apiGet sends GET apiBase+path. access_token rides in the HEADER (the
+// query-param form returns 404 on live OpenAPI endpoints). 429 → ErrRateLimit.
 func (c *Client) apiGet(ctx context.Context, path string, query url.Values, accessToken string) (json.RawMessage, error) {
 	if accessToken == "" {
 		return nil, fmt.Errorf("zalo_oa: empty access_token for %s", path)
@@ -124,11 +109,8 @@ func (c *Client) apiGet(ctx context.Context, path string, query url.Values, acce
 	return c.do(req, path)
 }
 
-// apiPost POSTs application/json to apiBase+path with the access token
-// in the `access_token` HEADER. Same envelope handling as apiGet.
-//
-// Logging note: only `path` is included in error messages — never the full
-// URL (defence-in-depth even though the token is no longer in the URL).
+// apiPost POSTs application/json. access_token in HEADER. Errors expose
+// path only — never full URL.
 func (c *Client) apiPost(ctx context.Context, path string, body any, accessToken string) (json.RawMessage, error) {
 	if accessToken == "" {
 		return nil, fmt.Errorf("zalo_oa: empty access_token for %s", path)
@@ -146,8 +128,7 @@ func (c *Client) apiPost(ctx context.Context, path string, body any, accessToken
 	return c.do(req, path)
 }
 
-// apiPostMultipart uploads a single file as multipart/form-data with the
-// given form fields. Token is header-carried; same convention as apiPost.
+// apiPostMultipart uploads a single file as multipart/form-data.
 func (c *Client) apiPostMultipart(ctx context.Context, path string, fileFieldName, fileName string, fileBytes []byte, fields map[string]string, accessToken string) (json.RawMessage, error) {
 	if accessToken == "" {
 		return nil, fmt.Errorf("zalo_oa: empty access_token for %s", path)
@@ -171,9 +152,7 @@ func (c *Client) apiPostMultipart(ctx context.Context, path string, fileFieldNam
 		return nil, fmt.Errorf("close multipart: %w", err)
 	}
 
-	// Per-request client with a longer timeout for uploads, but reuse the
-	// shared Transport so HTTPS_PROXY / keep-alive tuning configured in
-	// NewClient still apply.
+	// Per-request client: longer timeout for uploads, reuse shared Transport.
 	uploadClient := &http.Client{Timeout: uploadTimeout, Transport: c.http.Transport}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiBase+path, &buf)
 	if err != nil {
@@ -184,24 +163,18 @@ func (c *Client) apiPostMultipart(ctx context.Context, path string, fileFieldNam
 	return doRequest(uploadClient, req, path)
 }
 
-// do runs req against the shared http client and parses the envelope.
 func (c *Client) do(req *http.Request, path string) (json.RawMessage, error) {
 	return doRequest(c.http, req, path)
 }
 
-// doRequest executes the HTTP call and parses Zalo's envelope. Path-only
-// in error messages — never the full URL (token leakage).
-//
-// Token redaction: net/http wraps transport errors in *url.Error which
-// embeds the request URL (with `?access_token=...`) in its Error() string.
-// We rewrite urlErr.URL to a token-free form before bubbling the error up
-// so any upstream consumer that prints the error chain doesn't leak.
+// doRequest runs the call and parses Zalo's envelope. Rewrites *url.Error.URL
+// to path-only so any logged error never leaks tokens or full URLs.
 func doRequest(client *http.Client, req *http.Request, path string) (json.RawMessage, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) {
-			urlErr.URL = path // strip host + token for safe Error()
+			urlErr.URL = path
 		}
 		return nil, fmt.Errorf("zalo api %s: %w", path, err)
 	}
@@ -254,14 +227,11 @@ func (c *Client) postForm(ctx context.Context, fullURL string, headers map[strin
 		return nil, fmt.Errorf("read body: %w", err)
 	}
 	if traceEnabled {
-		// Body intentionally omitted — successful OAuth responses contain
-		// access_token + refresh_token in plaintext; logging them risks
-		// credentials landing in a log aggregator. Status code only.
+		// Body omitted: OAuth responses carry plaintext access/refresh tokens.
 		slog.Debug("zalo_oa.raw_response", "path", "oauth_token", "status", resp.StatusCode)
 	}
 
 	if resp.StatusCode >= 400 {
-		// Best-effort decode of envelope for context; otherwise return status.
 		var env APIError
 		if jerr := json.Unmarshal(raw, &env); jerr == nil && (env.Code != 0 || env.Message != "") {
 			return nil, &env
@@ -269,7 +239,7 @@ func (c *Client) postForm(ctx context.Context, fullURL string, headers map[strin
 		return nil, fmt.Errorf("http %d", resp.StatusCode)
 	}
 
-	// Zalo returns HTTP 200 with `{"error":N,"message":"..."}` for app-level errors.
+	// Zalo returns HTTP 200 with `{"error":N,"message":"..."}` for app errors.
 	var env APIError
 	if jerr := json.Unmarshal(raw, &env); jerr == nil && env.Code != 0 {
 		return nil, &env

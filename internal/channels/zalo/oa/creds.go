@@ -1,7 +1,5 @@
-// Package oa implements the phone-number-tied Zalo Official Account
-// channel using OAuth v4 (oauth.zaloapp.com + openapi.zalo.me). Distinct
-// from internal/channels/zalo/bot (static-token Bot) and zalo/personal
-// (QR personal). Different auth, different host, different message shapes.
+// Package oa implements the Zalo Official Account channel
+// (OAuth v4 — oauth.zaloapp.com + openapi.zalo.me).
 package oa
 
 import (
@@ -15,18 +13,16 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// ChannelCreds is the plaintext shape of the credentials JSON stored
-// inside the channel_instances.credentials BLOB. The store layer encrypts
-// the entire blob — do NOT call crypto.Encrypt/Decrypt on individual fields.
+// ChannelCreds is the plaintext credentials JSON stored inside the
+// channel_instances.credentials BLOB. The store layer encrypts the whole
+// blob — do NOT field-level encrypt.
 type ChannelCreds struct {
 	AppID     string `json:"app_id"`
 	SecretKey string `json:"secret_key"`
 	OAID      string `json:"oa_id,omitempty"`
 
-	// RedirectURI must match the callback URL registered on the Zalo dev
-	// console. Zalo returns error_code=-14003 "Invalid redirect uri" if
-	// these don't match. Operator-set per instance — pick any URL you have
-	// registered (a static "copy the code" page works fine).
+	// RedirectURI must match the URL registered on the Zalo dev console;
+	// otherwise Zalo returns error_code=-14003 "Invalid redirect uri".
 	RedirectURI string `json:"redirect_uri,omitempty"`
 
 	AccessToken   string    `json:"access_token,omitempty"`
@@ -35,8 +31,7 @@ type ChannelCreds struct {
 	LastRefreshAt time.Time `json:"last_refresh_at,omitempty"`
 }
 
-// LoadCreds parses plaintext credential JSON. The store layer has already
-// decrypted the surrounding blob.
+// LoadCreds parses plaintext credentials JSON.
 func LoadCreds(raw json.RawMessage) (*ChannelCreds, error) {
 	var c ChannelCreds
 	if err := json.Unmarshal(raw, &c); err != nil {
@@ -45,14 +40,12 @@ func LoadCreds(raw json.RawMessage) (*ChannelCreds, error) {
 	return &c, nil
 }
 
-// Marshal returns plaintext JSON. The store layer re-encrypts on Update.
+// Marshal returns plaintext JSON; store layer re-encrypts on Update.
 func (c *ChannelCreds) Marshal() (json.RawMessage, error) {
 	return json.Marshal(c)
 }
 
 // WithTokens copies new tokens onto the receiver and stamps LastRefreshAt.
-// Caller must pass a non-nil tok — passing nil indicates a programming error
-// upstream (refresh/exchange should never return (nil, nil)).
 func (c *ChannelCreds) WithTokens(tok *Tokens) {
 	c.AccessToken = tok.AccessToken
 	c.RefreshToken = tok.RefreshToken
@@ -60,9 +53,7 @@ func (c *ChannelCreds) WithTokens(tok *Tokens) {
 	c.LastRefreshAt = time.Now().UTC()
 }
 
-// Persist marshals the (plaintext) creds and writes the resulting blob to
-// the channel_instances row. The store layer re-encrypts on Update, so this
-// function does NO field-level encryption.
+// Persist writes the plaintext creds blob; store layer re-encrypts on Update.
 func Persist(ctx context.Context, s store.ChannelInstanceStore, id uuid.UUID, c *ChannelCreds) error {
 	if s == nil {
 		return fmt.Errorf("zalo_oa: nil ChannelInstanceStore in Persist")

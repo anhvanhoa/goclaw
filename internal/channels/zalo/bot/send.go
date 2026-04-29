@@ -13,14 +13,13 @@ import (
 
 const maxMediaBytes = 10 * 1024 * 1024 // 10MB
 
-// isHTTPURL reports whether u is an http or https URL. Bot's sendPhoto API
-// only accepts remote URLs; local paths must be rejected.
+// isHTTPURL gates sendPhoto inputs — Zalo Bot's sendPhoto only accepts
+// remote URLs.
 func isHTTPURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
-// mergeTrailingText joins caption + content with a blank line. Mirrors
-// zalo/oa's mergeTrailingText so users see consistent layout across channels.
+// mergeTrailingText joins caption + content with a blank line.
 func mergeTrailingText(caption, content string) string {
 	caption = strings.TrimSpace(caption)
 	content = strings.TrimSpace(content)
@@ -45,8 +44,8 @@ func (c *Channel) sendChunkedText(chatID, text string) error {
 	return nil
 }
 
-// downloadMedia fetches a photo from a Zalo CDN URL and saves it as a local temp file.
-// Zalo CDN URLs are auth-restricted and expire, so we must download immediately.
+// downloadMedia fetches a photo from Zalo's CDN to a local temp file.
+// CDN URLs are auth-restricted and expire.
 func (c *Channel) downloadMedia(url string) (string, error) {
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -58,7 +57,6 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 		return "", fmt.Errorf("http %d", resp.StatusCode)
 	}
 
-	// Detect extension from Content-Type
 	ext := ".jpg"
 	ct := resp.Header.Get("Content-Type")
 	switch {

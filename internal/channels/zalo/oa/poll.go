@@ -14,20 +14,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 )
 
-// message is a single entry in the /v2.0/oa/listrecentchat response. This
-// endpoint returns the most-recent N messages across all users — each row
-// IS a message, not a thread summary. The live response shape (verified
-// against openapi.zalo.me via API explorer, 2026-04-20):
-//
-//	{"error":0,"message":"Success","data":[{
-//	   "from_id":"...", "from_display_name":"...", "from_avatar":"...",
-//	   "to_id":"...",   "to_display_name":"...",   "to_avatar":"...",
-//	   "message_id":"...", "type":"text", "message":"...", "time":<unix-ms>
-//	}]}
-//
-// Filter: from_id == creds.OAID means OA outbound echo — skip.
-// The remaining fields are non-sensitive metadata we pass through as
-// bus.InboundMessage.Metadata when useful.
+// message is a single entry in the /v2.0/oa/listrecentchat response.
+// Each row is a message (not a thread summary).
 type message struct {
 	MessageID       string `json:"message_id"`
 	FromID          string `json:"from_id"`
@@ -64,20 +52,10 @@ func (c *Channel) listRecentChat(ctx context.Context, offset, count int) ([]mess
 	return wrap.Data, nil
 }
 
-// pollOnce runs one polling cycle. Returns ErrRateLimit if Zalo signals
-// 429 (caller should back off); other errors are transient and the next
-// cycle retries normally. Retry-once-on-auth mirrors Channel.post so a
-// revoked token gets a chance to refresh before we give up.
-//
-// Design: listrecentchat returns the last N messages across all users
-// (NOT a thread summary — each row is a message, verified via API
-// explorer 2026-04-20). We iterate oldest-first, filter OA echoes
-// (from_id == oa_id), dedup per-user by last-seen timestamp, and
-// dispatch via BaseChannel.HandleMessage.
-//
-// Phase 06: burn-down loop pages through listrecentchat until a partial
-// page (caught up) or maxPages cap (warn). Default 50 × 5 = 250 msg/cycle
-// vs the prior hardcoded 10 — ~25× headroom for bursty OAs.
+// pollOnce runs one polling cycle. Iterates oldest-first, filters OA
+// echoes (from_id == OAID), dedups per-user by last-seen timestamp.
+// Returns ErrRateLimit on HTTP 429; one auth retry via ForceRefresh.
+// Burn-down loop pages until a partial page (caught up) or maxPages cap.
 func (c *Channel) pollOnce(ctx context.Context) error {
 	if c.skipPollIfAuthFailed() {
 		return nil
@@ -87,9 +65,6 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 	maxPages := pollBurndownMaxPagesFromCfg(c.cfg.PollBurndownMaxPages)
 
 	for page := 0; page < maxPages; page++ {
-		// Honour shutdown / poll-tick cancellation between pages so a
-		// stop signal doesn't have to wait for the burn-down to exhaust
-		// all maxPages * pageSize messages (S2).
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -116,9 +91,8 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 	return nil
 }
 
-// listRecentChatRetryAuth wraps listRecentChat with a single retry-on-auth-
-// failure that forces a token refresh. Extracted from pollOnce so each
-// burn-down page can retry independently.
+// listRecentChatRetryAuth wraps listRecentChat with one retry on auth
+// failure that forces a token refresh.
 func (c *Channel) listRecentChatRetryAuth(ctx context.Context, offset, count int) ([]message, error) {
 	msgs, err := c.listRecentChat(ctx, offset, count)
 	if err == nil {
@@ -134,29 +108,23 @@ func (c *Channel) listRecentChatRetryAuth(ctx context.Context, offset, count int
 	return nil, err
 }
 
-// processMessages iterates a single page oldest-first, filters OA echoes
-// + malformed rows, dedups via (cursor, seenIDs), and dispatches each
-// surviving message through BaseChannel.HandleMessage.
+// processMessages iterates a page oldest-first, filters OA echoes and
+// malformed rows, dedups via (cursor, seenIDs), and dispatches via
+// BaseChannel.HandleMessage.
 func (c *Channel) processMessages(msgs []message) {
-	// Process oldest-first so the cursor advances monotonically.
+	// Oldest-first so the cursor advances monotonically.
 	sort.SliceStable(msgs, func(i, j int) bool { return msgs[i].Time < msgs[j].Time })
 
 	for _, m := range msgs {
 		if m.FromID == "" || m.FromID == c.creds.OAID {
-			continue // drop malformed + OA echoes
-		}
-		if m.Time == 0 && m.MessageID == "" {
-			// Without either signal there's no dedup hook — would re-dispatch
-			// every poll for as long as the row stays in the listrecentchat
-			// window. Drop rather than risk duplicate handler invocations.
 			continue
 		}
-		// Dedup by the (from_id, time) cursor when Zalo provides `time`.
-		// When time == 0 (field omitted), fall back to a bounded LRU of
-		// message_ids — otherwise a missing-time row would re-dispatch
-		// every poll tick for as long as it sits in listrecentchat's
-		// window. Real-world incidence is near zero (Zalo always sets
-		// time) but the safety net must hold.
+		if m.Time == 0 && m.MessageID == "" {
+			// No dedup signal — drop rather than risk re-dispatch on every poll.
+			continue
+		}
+		// Prefer (from_id, time) cursor; fall back to message_id LRU when
+		// Zalo omits time (rare).
 		if m.Time != 0 {
 			if m.Time <= c.cursor.Get(m.FromID) {
 				continue
@@ -172,8 +140,7 @@ func (c *Channel) processMessages(msgs []message) {
 }
 
 // dispatchInbound maps a Zalo message into a BaseChannel.HandleMessage call.
-// Zalo OA is DM-only, so chatID == senderID (the user's Zalo ID). Phase 04
-// emits text only — non-text payloads are logged and skipped.
+// Zalo OA is DM-only, so chatID == senderID. Text only; non-text is skipped.
 func (c *Channel) dispatchInbound(m message) {
 	if m.Type != "" && m.Type != "text" {
 		slog.Info("zalo_oa.poll.non_text_skipped",
@@ -191,8 +158,8 @@ func (c *Channel) dispatchInbound(m message) {
 	c.BaseChannel.HandleMessage(m.FromID, m.FromID, m.Text, nil, metadata, "direct")
 }
 
-// skipPollIfAuthFailed mirrors safety-ticker's skip behavior: once health
-// is Failed/Auth, we stop calling the API until the operator re-auths.
+// skipPollIfAuthFailed stops polling once health is Failed/Auth so we
+// don't hammer the API while waiting for operator re-auth.
 func (c *Channel) skipPollIfAuthFailed() bool {
 	snap := c.HealthSnapshot()
 	return snap.State == channels.ChannelHealthStateFailed && snap.FailureKind == channels.ChannelFailureKindAuth
@@ -223,7 +190,7 @@ func pollIntervalFromCfg(s int) time.Duration {
 }
 
 // pollCountFromCfg clamps cfg.PollCount to [pollCountFloor, pollCountCeil].
-// Zero/negative → defaultPollCount. Phase 06.
+// Zero/negative → defaultPollCount.
 func pollCountFromCfg(n int) int {
 	switch {
 	case n <= 0:
@@ -238,8 +205,7 @@ func pollCountFromCfg(n int) int {
 }
 
 // pollBurndownMaxPagesFromCfg clamps cfg.PollBurndownMaxPages to [1, 20].
-// Zero/negative → defaultPollBurndownMaxPages. 1 disables burn-down (single
-// page per cycle, mirrors pre-phase-06 behavior). Phase 06.
+// Zero/negative → defaultPollBurndownMaxPages. 1 disables burn-down.
 func pollBurndownMaxPagesFromCfg(n int) int {
 	switch {
 	case n <= 0:

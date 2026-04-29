@@ -9,9 +9,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 )
 
-// oaInboundEvent maps a single Zalo OA webhook event. Field shape mirrors
-// the published OA webhook contract; image/file/sticker payloads ride
-// alongside but are dropped in v1 (see HandleWebhookEvent).
+// oaInboundEvent maps a Zalo OA webhook event. Image/file/sticker
+// variants are accepted but ignored (text-only).
 type oaInboundEvent struct {
 	EventName string `json:"event_name"`
 	AppID     string `json:"app_id"`
@@ -26,7 +25,7 @@ type oaInboundEvent struct {
 	} `json:"recipient"`
 	Message struct {
 		MessageID string `json:"message_id,omitempty"`
-		MsgID     string `json:"msg_id,omitempty"` // alternate field seen in some OA payloads
+		MsgID     string `json:"msg_id,omitempty"` // alternate field in some OA payloads
 		Text      string `json:"text,omitempty"`
 	} `json:"message"`
 }
@@ -38,10 +37,8 @@ func (e *oaInboundEvent) messageID() string {
 	return e.Message.MsgID
 }
 
-// HandleWebhookEvent decodes a verified, deduped event and routes it to
-// the inbound message bus. Self-echo (Sender.ID == OAID) is filtered
-// because Zalo can deliver our own outbound sends back to the same URL —
-// without this guard the bot would reply to itself in a loop (A8).
+// HandleWebhookEvent routes a verified+deduped event onto the message bus.
+// Drops self-echoes (Sender.ID == OAID) so we don't reply to our own sends.
 func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) error {
 	var e oaInboundEvent
 	if err := json.Unmarshal(raw, &e); err != nil {
@@ -70,9 +67,8 @@ func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) err
 	}
 }
 
-// dispatchWebhookText forwards a text event onto the message bus via
-// BaseChannel.HandleMessage — same downstream path as the polling loop
-// so dedup, agent routing, and metadata stay aligned.
+// dispatchWebhookText forwards a text event via BaseChannel.HandleMessage
+// (same downstream path as polling).
 func (c *Channel) dispatchWebhookText(e *oaInboundEvent) {
 	if e.Message.Text == "" || e.Sender.ID == "" {
 		return
@@ -86,7 +82,7 @@ func (c *Channel) dispatchWebhookText(e *oaInboundEvent) {
 }
 
 // SignatureVerifier returns a verifier bound to this channel's webhook
-// secret + signature mode. Returned per call; cheap to construct.
+// secret + signature mode.
 func (c *Channel) SignatureVerifier() common.SignatureVerifier {
 	return newOASignatureVerifier(
 		c.creds.AppID,
@@ -96,9 +92,9 @@ func (c *Channel) SignatureVerifier() common.SignatureVerifier {
 	)
 }
 
-// MessageIDExtractor pulls the per-event id used by the router's dedup.
-// Empty id (extraction failure / schema drift) => router skips dedup and
-// the per-instance R3-2 streak counter watches for persistent emptiness.
+// MessageIDExtractor pulls the per-event id for the router's dedup.
+// Empty id → router skips dedup; the streak counter watches for persistent
+// emptiness as a schema-drift signal.
 func (c *Channel) MessageIDExtractor() common.MessageIDExtractor {
 	return oaMessageIDExtractor{}
 }

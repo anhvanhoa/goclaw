@@ -10,23 +10,15 @@ import (
 )
 
 const (
-	// catchUpStaleThreshold is how stale the cursor must be before the
-	// catch-up sweep does a recovery list call. Picked to tolerate normal
-	// gateway restarts without re-fetching every boot.
+	// catchUpStaleThreshold gates the sweep so a fresh restart doesn't
+	// re-fetch on every boot.
 	catchUpStaleThreshold = 30 * time.Minute
-	// catchUpPageSize is the bounded listrecentchat page size used by the
-	// recovery sweep — single page only, no pagination.
-	catchUpPageSize = 50
+	catchUpPageSize       = 50
 )
 
-// runCatchUpSweep recovers messages potentially missed during gateway
-// downtime. Single bounded listrecentchat page, error-tolerant. Gated on
-// cursor staleness so a fresh restart in steady-state polling doesn't
-// duplicate recent dispatches.
-//
-// The sweep funnels through the same dedup path as polling
-// ((from_id, time) cursor + seen_ids LRU) so any overlap with messages
-// already delivered via webhook is harmless.
+// runCatchUpSweep recovers messages possibly missed during downtime.
+// Single bounded page, error-tolerant. Reuses the polling dedup path so
+// overlap with webhook deliveries is harmless.
 func (c *Channel) runCatchUpSweep(parentCtx context.Context) {
 	ctx := store.WithTenantID(parentCtx, c.TenantID())
 

@@ -10,8 +10,7 @@ import (
 	"time"
 )
 
-// apiBase is the Zalo Bot API root. Declared as a variable so tests can
-// override it with an httptest.NewServer URL.
+// apiBase is the Zalo Bot API root; var so tests can override.
 var apiBase = "https://bot-api.zaloplatforms.com"
 
 func (c *Channel) callAPI(method string, body any) (json.RawMessage, error) {

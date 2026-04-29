@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-// isZaloSupportedFileMIME reports whether mime is one of the document
-// formats Zalo's /v2.0/oa/upload/file endpoint accepts: PDF, DOC, DOCX.
-// Other types must not be sent via that endpoint — Zalo silently rejects.
+// isZaloSupportedFileMIME: /v2.0/oa/upload/file accepts PDF/DOC/DOCX only;
+// other types are silently rejected by Zalo.
 func isZaloSupportedFileMIME(mime string) bool {
 	switch strings.ToLower(strings.TrimSpace(mime)) {
 	case "application/pdf",
@@ -22,8 +21,7 @@ func isZaloSupportedFileMIME(mime string) bool {
 	return false
 }
 
-// SendText delivers a plain text message to userID. Returns the upstream
-// message_id on success.
+// SendText delivers plain text. Returns the upstream message_id.
 func (c *Channel) SendText(ctx context.Context, userID, text string) (string, error) {
 	mid, err := c.post(ctx, pathSendMessage, buildTextBody(userID, text))
 	if err == nil {
@@ -32,13 +30,10 @@ func (c *Channel) SendText(ctx context.Context, userID, text string) (string, er
 	return mid, err
 }
 
-// SendImage uploads an image and posts an attachment message. mime must
-// be "image/jpeg" or "image/png" — used to pick the multipart filename
-// extension which Zalo uses to validate the payload type.
-//
-// Zalo's send endpoint wants the template/media payload shape for
-// image attachments (simple {"type":"image","payload":{"attachment_id"}}
-// returns -201 Params is invalid).
+// SendImage uploads + sends an image. mime must be image/jpeg or image/png
+// (drives the multipart filename extension Zalo validates against).
+// Image attachments require the template/media payload shape; the simpler
+// {"type":"image","payload":{"attachment_id"}} returns -201.
 func (c *Channel) SendImage(ctx context.Context, userID string, data []byte, mime string) (string, error) {
 	tok, err := c.uploadImage(ctx, data, mime)
 	if err != nil {
@@ -52,9 +47,7 @@ func (c *Channel) SendImage(ctx context.Context, userID string, data []byte, mim
 	return mid, err
 }
 
-// SendGIF uploads animated-GIF bytes to Zalo's dedicated gif endpoint
-// and posts an image-attachment message referencing the upload token.
-// Zalo caps /upload/gif at 5MB (callers should enforce before calling).
+// SendGIF uploads + sends a GIF via /upload/gif (5MB cap, enforced by caller).
 func (c *Channel) SendGIF(ctx context.Context, userID string, data []byte) (string, error) {
 	if len(data) == 0 {
 		return "", errors.New("zalo_oa: refusing to send empty gif")
@@ -63,7 +56,6 @@ func (c *Channel) SendGIF(ctx context.Context, userID string, data []byte) (stri
 	if err != nil {
 		return "", err
 	}
-	// GIFs use the same template/media shape as images with media_type "gif".
 	body := buildMediaAttachmentBody(userID, "gif", tok)
 	mid, err := c.post(ctx, pathSendMessage, body)
 	if err == nil {
@@ -72,13 +64,9 @@ func (c *Channel) SendGIF(ctx context.Context, userID string, data []byte) (stri
 	return mid, err
 }
 
-// The four Send* payload builders live together so drift between them is
-// obvious on read. Each emits the exact JSON shape Zalo's send endpoint
-// requires — images + gifs use template/media (simpler shapes trigger
-// -201 Params invalid); files use the plain type=file shape; text carries
-// no attachment wrapper at all.
+// Payload builders for /v3.0/oa/message/cs. Images + gifs use template/media;
+// files use plain type=file; text has no attachment wrapper.
 
-// buildTextBody returns the JSON shape for /v3.0/oa/message/cs text-only sends.
 func buildTextBody(userID, text string) map[string]any {
 	return map[string]any{
 		"recipient": map[string]any{"user_id": userID},
@@ -86,10 +74,8 @@ func buildTextBody(userID, text string) map[string]any {
 	}
 }
 
-// buildMediaAttachmentBody returns the template/media payload shape for
-// image + gif attachments. mediaType is either "image" or "gif".
-// Verified against nh4ttruong/zalo-oa-api-wrapper + the -201 error that
-// simpler shapes trigger.
+// buildMediaAttachmentBody is the template/media shape for image+gif sends.
+// mediaType is "image" or "gif".
 func buildMediaAttachmentBody(userID, mediaType, attachmentID string) map[string]any {
 	return map[string]any{
 		"recipient": map[string]any{"user_id": userID},
@@ -108,10 +94,8 @@ func buildMediaAttachmentBody(userID, mediaType, attachmentID string) map[string
 	}
 }
 
-// buildFileAttachmentBody returns the plain type=file payload shape for
-// file attachments. File sends do NOT use the template/media wrapper —
-// Zalo's send endpoint routes on attachment.type to decide how to
-// present the attachment downstream.
+// buildFileAttachmentBody is the plain type=file shape; files do NOT use
+// the template/media wrapper.
 func buildFileAttachmentBody(userID, attachmentID string) map[string]any {
 	return map[string]any{
 		"recipient": map[string]any{"user_id": userID},
@@ -124,11 +108,9 @@ func buildFileAttachmentBody(userID, attachmentID string) map[string]any {
 	}
 }
 
-// SendFile uploads a file and posts an attachment message. filename is
-// passed in the multipart "filename" field so Zalo preserves it for the
-// recipient. Empty payloads are rejected before the HTTP call. MIME-based
-// gating lives in the caller (see channel.go dispatch) — by the time we
-// reach SendFile, the payload is known to be a supported type.
+// SendFile uploads + sends a file. filename rides in the multipart
+// "filename" field so Zalo preserves it for the recipient. MIME gating
+// lives at the caller (channel.go dispatch).
 func (c *Channel) SendFile(ctx context.Context, userID string, data []byte, filename string) (string, error) {
 	if len(data) == 0 {
 		return "", fmt.Errorf("zalo_oa: refusing to send empty/zero-byte file %q", filename)
@@ -144,20 +126,13 @@ func (c *Channel) SendFile(ctx context.Context, userID string, data []byte, file
 	return mid, err
 }
 
-// post wraps the API call with a retry-once-on-auth-error pattern. The first
-// auth-classified error triggers ForceRefresh and one retry; a second auth
-// error fails cleanly (no infinite loop). Non-auth errors return immediately.
-//
-// Loop is structured so EVERY iteration ends in either a success-return,
-// a non-auth-error-return, or (only on attempt 0) a continue. The 2nd
-// iteration cannot loop further — it returns unconditionally.
+// post wraps apiPost with retry-once-on-auth: the first auth error triggers
+// ForceRefresh + one retry. Other errors return immediately and flip health
+// to Failed/Auth so the dashboard surfaces the reauth prompt promptly.
 func (c *Channel) post(ctx context.Context, path string, body any) (string, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		tok, err := c.tokens.Access(ctx)
 		if err != nil {
-			// Token refresh died (refresh-token expired, etc.) — surface to
-			// health so operators see the reauth prompt immediately instead
-			// of waiting for the 30-min safety ticker.
 			c.markAuthFailedIfNeeded(err)
 			return "", err
 		}
@@ -170,17 +145,13 @@ func (c *Channel) post(ctx context.Context, path string, body any) (string, erro
 			c.tokens.ForceRefresh()
 			continue
 		}
-		// Non-retryable error after the retry-once-on-auth attempt; if it's
-		// still an auth failure here, the OA-app association is broken.
 		c.markAuthFailedIfNeeded(err)
 		return "", err
 	}
-	// Unreachable — second iteration always returns. Defensive panic so a
-	// future refactor that violates the loop invariant fails loudly.
-	panic("zalo_oa.post: loop exited without returning (broken invariant)")
+	panic("zalo_oa.post: loop exited without returning")
 }
 
-// parseMessageResponse extracts message_id from the standard envelope:
+// parseMessageResponse pulls message_id from the standard envelope:
 // {"error":0,"data":{"message_id":"...","recipient_id":"..."}}
 func parseMessageResponse(raw json.RawMessage) (string, error) {
 	var env struct {

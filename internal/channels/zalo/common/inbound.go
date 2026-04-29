@@ -1,29 +1,19 @@
 package common
 
-// Platform values written into inbound message metadata. Downstream
-// consumers (logging, analytics, agent prompts) discriminate channel
-// flavor by this string.
-//
-// Note: PlatformZaloBot is "zalo_bot", not "zalo" — bot's pre-unification
-// metadata used "zalo". This is a silent breaking change for any consumer
-// keyed on the literal "zalo" value (S1 in the plan). The migration was
-// audited via repo-wide grep before the rename landed.
+// Platform values for inbound message metadata.
 const (
 	PlatformZaloBot = "zalo_bot"
 	PlatformZaloOA  = "zalo_oa"
 )
 
-// InboundMeta captures the channel-agnostic per-message metadata that
-// both bot and oa publish to the message bus. It exists to keep the
-// metadata-map shape consistent across channel flavors.
+// InboundMeta is the per-message metadata both bot and oa publish.
 type InboundMeta struct {
 	MessageID         string
-	Platform          string // PlatformZaloBot or PlatformZaloOA
-	SenderDisplayName string // optional
+	Platform          string
+	SenderDisplayName string
 }
 
-// ToMap returns the metadata-map shape expected by BaseChannel.HandleMessage.
-// Empty optional fields are omitted.
+// ToMap returns the shape BaseChannel.HandleMessage expects.
 func (m InboundMeta) ToMap() map[string]string {
 	out := map[string]string{
 		"platform": m.Platform,

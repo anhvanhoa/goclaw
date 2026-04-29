@@ -12,15 +12,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// refreshMargin matches internal/oauth/token.go:33 — refresh when the access
-// token expires within this window.
+// refreshMargin: refresh when the access token expires within this window.
 const refreshMargin = 5 * time.Minute
 
-// tokenSource is a lazy refresher for the channel's access token. It mirrors
-// internal/oauth/token.go DBTokenSource: a single mutex guards both the cache
-// and the HTTP refresh, so concurrent callers serialize naturally and only
-// one refresh ever flies (Zalo refresh tokens are single-use — racing
-// goroutines would invalidate each other's tokens).
+// tokenSource lazily refreshes the access token. A single mutex guards
+// both the cache and the HTTP refresh so only one refresh flies — Zalo
+// refresh tokens are single-use and races would invalidate each other.
 type tokenSource struct {
 	client     *Client
 	creds      *ChannelCreds
@@ -30,13 +27,7 @@ type tokenSource struct {
 	mu sync.Mutex // guards creds.{Access,Refresh}Token + ExpiresAt + serializes refresh
 }
 
-// ForceRefresh marks the cached token as stale so the NEXT Access() call
-// performs an HTTP refresh. Used by Send when the API returns an auth-class
-// error mid-call (token rotated externally or a clock skew issue).
-//
-// We zero BOTH ExpiresAt and AccessToken so the Access() guard cannot
-// short-circuit on a non-empty token even if a future change loosens the
-// expiry check. Belt-and-suspenders: today either alone is sufficient.
+// ForceRefresh marks the cached token stale so the next Access() refreshes.
 func (ts *tokenSource) ForceRefresh() {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -44,8 +35,7 @@ func (ts *tokenSource) ForceRefresh() {
 	ts.creds.AccessToken = ""
 }
 
-// Access returns a currently-valid access token, refreshing under the same
-// mutex if the cached token is within `refreshMargin` of expiry.
+// Access returns a valid access token, refreshing if within refreshMargin.
 func (ts *tokenSource) Access(ctx context.Context) (string, error) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -60,21 +50,15 @@ func (ts *tokenSource) Access(ctx context.Context) (string, error) {
 	return ts.creds.AccessToken, nil
 }
 
-// doRefresh performs the HTTP refresh + persistence. Caller MUST hold ts.mu.
-//
-// Ordering: persist-before-commit. We snapshot a copy of creds with the new
-// tokens, persist that snapshot, and only swap the live creds on success.
-// Rationale: Zalo refresh tokens are single-use, so the upstream call ALREADY
-// burned the old refresh token. If Persist fails, the live creds in memory
-// stay on the new tokens (because we still need them to keep working until
-// process restart) BUT the DB has the stale tokens. On restart, the next
-// refresh attempt with the stale refresh token returns invalid_grant →
-// ErrAuthExpired → operator re-auth. This is the best safe failure mode.
+// doRefresh performs the HTTP refresh + persistence. Holds ts.mu.
+// Persist-before-commit: if Persist fails after a successful refresh we
+// keep the new tokens in memory (the old refresh token is already burned)
+// but DB has stale tokens — next process restart will fail to invalid_grant
+// and surface re-auth, which is the safe failure mode.
 func (ts *tokenSource) doRefresh(ctx context.Context) error {
 	if ts.creds.RefreshToken == "" {
-		// Distinct sentinel: pre-authorization (paste-code not yet exchanged)
-		// is NOT the same as a burned refresh token. Caller's
-		// markAuthFailedIfNeeded should NOT escalate this to Failed.
+		// Pre-authorization: distinct from a burned refresh token; do NOT
+		// escalate to Failed.
 		return ErrNotAuthorized
 	}
 
@@ -89,13 +73,11 @@ func (ts *tokenSource) doRefresh(ctx context.Context) error {
 		return err
 	}
 
-	// Build a snapshot copy of creds with the new tokens, persist, then commit.
 	snapshot := *ts.creds
 	snapshot.WithTokens(tok)
 	if err := Persist(ctx, ts.store, ts.instanceID, &snapshot); err != nil {
 		slog.Error("zalo_oa.persist_failed", "instance_id", ts.instanceID, "oa_id", ts.creds.OAID, "error", err)
-		// Commit to memory anyway: the burned refresh token is the only one
-		// we have; the new pair must remain usable until process restart.
+		// Commit in memory: the new pair is the only valid one until restart.
 		*ts.creds = snapshot
 		return err
 	}
