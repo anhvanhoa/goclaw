@@ -15,9 +15,10 @@ import (
 // refreshMargin: refresh when the access token expires within this window.
 const refreshMargin = 5 * time.Minute
 
-// tokenSource lazily refreshes the access token. A single mutex guards
-// both the cache and the HTTP refresh so only one refresh flies — Zalo
-// refresh tokens are single-use and races would invalidate each other.
+// tokenSource lazily refreshes the access token. ts.mu is the innermost
+// lock and is held across the HTTP refresh by design: Zalo refresh tokens
+// are single-use, so the in-critical-section roundtrip is the single-flight
+// guarantee. ctx cancellation unblocks a stuck refresh via the HTTP call.
 type tokenSource struct {
 	client     *Client
 	creds      *ChannelCreds

@@ -130,6 +130,7 @@ func (c *Channel) SendFile(ctx context.Context, userID string, data []byte, file
 // ForceRefresh + one retry. Other errors return immediately and flip health
 // to Failed/Auth so the dashboard surfaces the reauth prompt promptly.
 func (c *Channel) post(ctx context.Context, path string, body any) (string, error) {
+	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		tok, err := c.tokens.Access(ctx)
 		if err != nil {
@@ -143,12 +144,13 @@ func (c *Channel) post(ctx context.Context, path string, body any) (string, erro
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.isAuth() && attempt == 0 {
 			c.tokens.ForceRefresh()
+			lastErr = err
 			continue
 		}
 		c.markAuthFailedIfNeeded(err)
 		return "", err
 	}
-	panic("zalo_oa.post: loop exited without returning")
+	return "", lastErr
 }
 
 // parseMessageResponse pulls message_id from the standard envelope:

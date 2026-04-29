@@ -74,7 +74,8 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 	}
 	defer f.Close()
 
-	n, err := io.Copy(f, io.LimitReader(resp.Body, maxMediaBytes))
+	// cap+1 distinguishes fits from truncated; bare LimitReader chops silently.
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxMediaBytes+1))
 	if err != nil {
 		os.Remove(f.Name())
 		return "", fmt.Errorf("write: %w", err)
@@ -82,6 +83,10 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 	if n == 0 {
 		os.Remove(f.Name())
 		return "", fmt.Errorf("empty response")
+	}
+	if n > maxMediaBytes {
+		os.Remove(f.Name())
+		return "", fmt.Errorf("media exceeds %d byte cap", maxMediaBytes)
 	}
 
 	slog.Debug("zalo media downloaded", "path", f.Name(), "size", n)

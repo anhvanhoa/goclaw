@@ -569,6 +569,23 @@ func TestDownloadMedia_EmptyResponseReturnsError(t *testing.T) {
 	}
 }
 
+// TestDownloadMedia_OversizeReturnsError verifies the cap is enforced rather
+// than silently truncating (regression: bare LimitReader chops oversize media).
+func TestDownloadMedia_OversizeReturnsError(t *testing.T) {
+	// Stream cap+1 bytes so io.Copy reads past the cap and triggers the guard.
+	const oversize = 10*1024*1024 + 1
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write(bytes.Repeat([]byte("x"), oversize))
+	}))
+	defer srv.Close()
+
+	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
+	if _, err := ch.downloadMedia(srv.URL); err == nil {
+		t.Fatal("expected oversize error, got nil")
+	}
+}
+
 // TestDownloadMedia_FallbackJPEGExtension verifies an unknown content-type
 // defaults to .jpg extension.
 func TestDownloadMedia_FallbackJPEGExtension(t *testing.T) {

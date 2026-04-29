@@ -45,6 +45,8 @@ type Channel struct {
 
 	webhookRouter *common.Router
 
+	stopOnce sync.Once
+
 	// legacyPhotoSentinelWarn fires once if a caller still emits the
 	// deprecated [photo:URL] sentinel after the Media[] migration.
 	legacyPhotoSentinelWarn sync.Once
@@ -142,7 +144,7 @@ func (c *Channel) Stop(_ context.Context) error {
 	if c.transport == "webhook" && c.webhookRouter != nil {
 		c.webhookRouter.UnregisterInstance(c.instanceID)
 	}
-	close(c.stopCh)
+	c.stopOnce.Do(func() { close(c.stopCh) })
 	c.SetRunning(false)
 	return nil
 }
