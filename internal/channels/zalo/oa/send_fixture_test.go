@@ -14,14 +14,12 @@ import (
 )
 
 // TestSend_WireShape_Fixtures locks the exact JSON bytes each Send* function
-// sends to /v3.0/oa/message/cs. Guards against byte-drift during the A3
-// builder unification refactor (Phase 02). Runs under plain `go test -race`,
-// no build tag.
+// sends to /v3.0/oa/message/cs. Guards against accidental byte-drift in the
+// outbound wire shape. Runs under plain `go test -race`, no build tag.
 //
-// On mismatch: either (a) the refactor changed behavior — revert it, or
-// (b) the fixture is stale because we intentionally changed the wire shape
-// — update the fixture AND land that behavior change as a separate commit
-// with a clear subject line.
+// On mismatch: either (a) an unintended behavior change — revert it, or
+// (b) the wire shape was intentionally changed — regenerate the fixture
+// AND land that behavior change as a separate commit with a clear subject.
 func TestSend_WireShape_Fixtures(t *testing.T) {
 	t.Parallel()
 

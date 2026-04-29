@@ -154,7 +154,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	}
 
 	// Zalo Bot doesn't render markup.
-	msg.Content = StripMarkdown(msg.Content)
+	msg.Content = common.StripMarkdown(msg.Content)
 
 	if strings.Contains(msg.Content, "[photo:") {
 		c.legacyPhotoSentinelWarn.Do(func() {

@@ -1,5 +1,5 @@
-// Package common holds shared building blocks used by both Zalo channel
-// flavors (zalo_bot and zalo_oa).
+// Package common holds shared building blocks used by all Zalo channel
+// flavors (zalo_bot, zalo_oa, zalo_personal).
 package common
 
 import (
