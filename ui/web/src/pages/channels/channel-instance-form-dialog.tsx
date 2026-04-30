@@ -119,6 +119,28 @@ export function ChannelInstanceFormDialog({
     }
   }, [open, instance, agents, form]);
 
+  // Create mode: re-seed config defaults when the user switches channel type
+  // so dependent `showWhen` fields (e.g. zalo_bot.webhook_secret depends on
+  // transport=webhook) become visible. Edit mode locks channel_type so this
+  // is a no-op there.
+  useEffect(() => {
+    if (!open || instance) return;
+    const schema = configSchema[channelType] ?? [];
+    const defaults: Record<string, unknown> = {};
+    for (const f of schema) {
+      if (f.defaultValue !== undefined) defaults[f.key] = f.defaultValue;
+    }
+    const boolSelectKeys = new Set(
+      schema.filter((f) => f.type === "select" && f.options?.some((o) => o.value === "true")).map((f) => f.key),
+    );
+    for (const key of boolSelectKeys) {
+      if (typeof defaults[key] === "boolean") defaults[key] = String(defaults[key]);
+      else if (defaults[key] === undefined) defaults[key] = "inherit";
+    }
+    setConfigValues(defaults);
+    setCredsValues({});
+  }, [open, instance, channelType]);
+
   useEffect(() => {
     if (step !== "auth" || !authCompleted) return;
     const next = getNextWizardStep("auth");
