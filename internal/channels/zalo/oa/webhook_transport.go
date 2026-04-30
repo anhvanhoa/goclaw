@@ -57,18 +57,21 @@ func (c *Channel) startWebhookTransport() error {
 }
 
 // runCatchUpSweepGoroutine runs runCatchUpSweep with stopCh-aware cancel.
+// Both goroutines are tracked by catchUpWG so Stop() drains cleanly.
 func (c *Channel) runCatchUpSweepGoroutine() {
 	defer c.catchUpWG.Done()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	done := make(chan struct{})
-	defer close(done)
+
+	c.catchUpWG.Add(1)
 	go func() {
+		defer c.catchUpWG.Done()
 		select {
 		case <-c.stopCh:
 			cancel()
-		case <-done:
+		case <-ctx.Done():
 		}
 	}()
+
 	c.runCatchUpSweep(ctx)
 }

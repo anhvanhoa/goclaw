@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,12 @@ func TestHandleWebhookEvent_BadJSONReturnsError(t *testing.T) {
 }
 
 func TestStart_WebhookRequiresSecret(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-xyz","display_name":"TestBot"}}`))
+	}))
+	defer srv.Close()
+	swapAPIBase(t, srv.URL)
+
 	mb := bus.New()
 	ch, err := New(config.ZaloConfig{
 		Token:     "tok",
@@ -125,12 +132,15 @@ func TestStart_WebhookRequiresSecret(t *testing.T) {
 	}
 	ch.webhookRouter = common.NewRouter()
 	ch.instanceID = uuid.New()
-	// Stub getMe by setting apiBase to a working test server. Simplest: just
-	// call Start() and accept that getMe will fail because token is "tok"
-	// against the real Zalo API. Use a captured server.
-	if err := ch.Start(context.Background()); err == nil || !strings.Contains(err.Error(), "getMe") && !strings.Contains(err.Error(), "webhook_secret") {
-		// Either getMe (network) failure or the explicit secret check is
-		// acceptable; both prove the webhook path is gated.
-		_ = err
+
+	err = ch.Start(context.Background())
+	if err == nil {
+		t.Fatal("Start without webhook_secret should fail")
+	}
+	if !strings.Contains(err.Error(), "webhook_secret") {
+		t.Errorf("err = %v, want webhook_secret rejection", err)
+	}
+	if ch.IsRunning() {
+		t.Error("channel should not remain running after Start failure")
 	}
 }

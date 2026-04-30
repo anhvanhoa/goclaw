@@ -535,7 +535,7 @@ func TestChannelSend_StripsMarkdown(t *testing.T) {
 
 	err := c.Send(context.Background(), bus.OutboundMessage{
 		ChatID:  "u",
-		Content: "**Bold** and __italic__\n\n---\n\n# Header\n- bullet\n`code`",
+		Content: "**Bold** and __very emphatic__\n\n---\n\n# Header\n- bullet\n`code`",
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -552,7 +552,7 @@ func TestChannelSend_StripsMarkdown(t *testing.T) {
 			t.Errorf("markdown not stripped: %q still contains %q", text, banned)
 		}
 	}
-	for _, want := range []string{"Bold", "italic", "Header", "bullet", "code"} {
+	for _, want := range []string{"Bold", "very emphatic", "Header", "bullet", "code"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("content lost during strip: missing %q in %q", want, text)
 		}

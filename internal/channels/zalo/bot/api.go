@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -39,7 +40,8 @@ func (c *Channel) callAPIWith(ctx context.Context, client *http.Client, method s
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("api call %s: %w", method, err)
+		// *url.Error embeds the full URL including the bot token; scrub it.
+		return nil, fmt.Errorf("api call %s: %s", method, strings.ReplaceAll(err.Error(), c.token, "<redacted>"))
 	}
 	defer resp.Body.Close()
 

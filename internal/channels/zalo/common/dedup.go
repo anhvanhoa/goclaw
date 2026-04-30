@@ -7,22 +7,40 @@ import (
 	"github.com/google/uuid"
 )
 
-// Dedup is a bounded LRU+TTL cache of webhook message IDs scoped per
-// channel-instance UUID. Used by the router to short-circuit retries
-// Zalo sends after timeouts.
+// Dedup is a TTL cache of (instanceID, messageID) pairs with global and
+// per-instance caps. Eviction on cap-hit removes the oldest entry — not
+// strict LRU, since access doesn't refresh ordering. The per-instance cap
+// prevents a single noisy tenant from monopolizing the global slot count.
 type Dedup struct {
-	mu  sync.Mutex
-	ttl time.Duration
-	max int
-	m   map[string]time.Time // key: instanceID|messageID
+	mu             sync.Mutex
+	ttl            time.Duration
+	maxGlobal      int
+	maxPerInstance int
+	now            func() time.Time
+
+	entries map[string]dedupEntry
+	perInst map[uuid.UUID]int
 }
 
-// NewDedup returns a Dedup with TTL and max-entries cap.
-func NewDedup(ttl time.Duration, max int) *Dedup {
+type dedupEntry struct {
+	addedAt    time.Time
+	instanceID uuid.UUID
+}
+
+// NewDedup returns a Dedup with TTL and global cap. Per-instance cap is
+// derived as max(maxGlobal/4, 1) so tenants can't starve each other.
+func NewDedup(ttl time.Duration, maxGlobal int) *Dedup {
+	perInst := maxGlobal / 4
+	if perInst < 1 {
+		perInst = 1
+	}
 	return &Dedup{
-		ttl: ttl,
-		max: max,
-		m:   make(map[string]time.Time),
+		ttl:            ttl,
+		maxGlobal:      maxGlobal,
+		maxPerInstance: perInst,
+		now:            time.Now,
+		entries:        make(map[string]dedupEntry),
+		perInst:        make(map[uuid.UUID]int),
 	}
 }
 
@@ -37,16 +55,23 @@ func (d *Dedup) SeenOrAdd(instanceID uuid.UUID, messageID string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	now := time.Now()
-	if t, ok := d.m[key]; ok && now.Sub(t) < d.ttl {
+	now := d.now()
+	if e, ok := d.entries[key]; ok && now.Sub(e.addedAt) < d.ttl {
 		return true
 	}
 
 	d.evictExpired(now)
-	if len(d.m) >= d.max {
-		d.evictOldest()
+	if d.perInst[instanceID] >= d.maxPerInstance {
+		d.evictOldestForInstance(instanceID)
 	}
-	d.m[key] = now
+	if len(d.entries) >= d.maxGlobal {
+		d.evictOldestGlobal()
+	}
+
+	if _, exists := d.entries[key]; !exists {
+		d.perInst[instanceID]++
+	}
+	d.entries[key] = dedupEntry{addedAt: now, instanceID: instanceID}
 	return false
 }
 
@@ -54,29 +79,62 @@ func (d *Dedup) SeenOrAdd(instanceID uuid.UUID, messageID string) bool {
 func (d *Dedup) Len() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return len(d.m)
+	return len(d.entries)
 }
 
 func (d *Dedup) evictExpired(now time.Time) {
-	for k, t := range d.m {
-		if now.Sub(t) >= d.ttl {
-			delete(d.m, k)
+	for k, e := range d.entries {
+		if now.Sub(e.addedAt) >= d.ttl {
+			d.deleteKey(k)
 		}
 	}
 }
 
-func (d *Dedup) evictOldest() {
+func (d *Dedup) evictOldestGlobal() {
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
-	for k, t := range d.m {
-		if first || t.Before(oldestTime) {
+	for k, e := range d.entries {
+		if first || e.addedAt.Before(oldestTime) {
 			oldestKey = k
-			oldestTime = t
+			oldestTime = e.addedAt
 			first = false
 		}
 	}
 	if !first {
-		delete(d.m, oldestKey)
+		d.deleteKey(oldestKey)
+	}
+}
+
+func (d *Dedup) evictOldestForInstance(id uuid.UUID) {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, e := range d.entries {
+		if e.instanceID != id {
+			continue
+		}
+		if first || e.addedAt.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = e.addedAt
+			first = false
+		}
+	}
+	if !first {
+		d.deleteKey(oldestKey)
+	}
+}
+
+func (d *Dedup) deleteKey(k string) {
+	e, ok := d.entries[k]
+	if !ok {
+		return
+	}
+	delete(d.entries, k)
+	if d.perInst[e.instanceID] > 0 {
+		d.perInst[e.instanceID]--
+		if d.perInst[e.instanceID] == 0 {
+			delete(d.perInst, e.instanceID)
+		}
 	}
 }

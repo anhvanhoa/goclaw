@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -214,10 +215,12 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return errors.New("zalo_oa: empty user_id")
 	}
 
-	// Zalo doesn't render markup — strip before send.
 	msg.Content = common.StripMarkdown(msg.Content)
-	for i := range msg.Media {
-		msg.Media[i].Caption = common.StripMarkdown(msg.Media[i].Caption)
+	if len(msg.Media) > 0 {
+		msg.Media = slices.Clone(msg.Media)
+		for i := range msg.Media {
+			msg.Media[i].Caption = common.StripMarkdown(msg.Media[i].Caption)
+		}
 	}
 
 	quoteID := msg.Metadata["reply_to_message_id"]

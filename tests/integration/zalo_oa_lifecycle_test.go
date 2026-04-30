@@ -138,7 +138,7 @@ func TestZaloOALifecycle(t *testing.T) {
 
 	// ── 6. Send text — assert mock receives it ────────────────────────
 	mock.Override(zch)
-	if _, err := zch.SendText(ctx, "user-1", "integration-hello"); err != nil {
+	if _, err := zch.SendText(ctx, "user-1", "integration-hello", ""); err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
 	if got := mock.SendCount(); got != 1 {
@@ -148,7 +148,7 @@ func TestZaloOALifecycle(t *testing.T) {
 	// ── 7. Force refresh + send — assert refresh hit + new token used ──
 	mock.QueueRefreshOK("AT-rotated", "RT-rotated")
 	zch.ForceRefreshForTest()
-	if _, err := zch.SendText(ctx, "user-1", "post-refresh"); err != nil {
+	if _, err := zch.SendText(ctx, "user-1", "post-refresh", ""); err != nil {
 		t.Fatalf("SendText post-refresh: %v", err)
 	}
 	if got := mock.RefreshCount(); got != 1 {
@@ -161,7 +161,7 @@ func TestZaloOALifecycle(t *testing.T) {
 	// ── 8. Auth-expired refresh → health flips Failed/Auth ────────────
 	mock.QueueRefreshAuthExpired()
 	zch.ForceRefreshForTest()
-	_, err = zch.SendText(ctx, "user-1", "this should fail")
+	_, err = zch.SendText(ctx, "user-1", "this should fail", "")
 	if err == nil {
 		t.Error("expected SendText to fail after auth-expired refresh")
 	}

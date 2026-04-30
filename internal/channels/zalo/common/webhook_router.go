@@ -60,6 +60,8 @@ type registeredInstance struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	dispatchWG sync.WaitGroup
+
 	// emptyIDStreak counts consecutive empty extractor returns; resets on
 	// any non-empty extraction.
 	emptyIDStreak atomic.Int64
@@ -140,8 +142,11 @@ func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.
 	return nil
 }
 
-// UnregisterInstance removes the channel and cancels its dispatch ctx.
-// Idempotent.
+// unregisterDrainTimeout bounds Stop()/Reload() so a slow handler can't hang shutdown.
+const unregisterDrainTimeout = 5 * time.Second
+
+// UnregisterInstance removes the channel, cancels its dispatch ctx, and
+// drains in-flight dispatch goroutines (bounded). Idempotent.
 func (r *Router) UnregisterInstance(id uuid.UUID) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
@@ -151,8 +156,22 @@ func (r *Router) UnregisterInstance(id uuid.UUID) {
 		delete(r.instanceToSlug, id)
 	}
 	r.mu.Unlock()
-	if ok && inst.cancel != nil {
+	if !ok {
+		return
+	}
+	if inst.cancel != nil {
 		inst.cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		inst.dispatchWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(unregisterDrainTimeout):
+		slog.Warn("zalo_webhook.unregister_drain_timeout",
+			"instance_id", id, "timeout", unregisterDrainTimeout)
 	}
 }
 
@@ -235,6 +254,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	inst.dispatchWG.Add(1)
 	go r.dispatch(instanceID, inst, body)
 	w.WriteHeader(http.StatusOK)
 }
@@ -242,6 +262,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // dispatch runs the handler in a goroutine so the HTTP ack isn't blocked
 // (Zalo expects ack within ~2s). Panics are recovered and logged.
 func (r *Router) dispatch(instanceID uuid.UUID, inst *registeredInstance, body []byte) {
+	defer inst.dispatchWG.Done()
 	defer safego.Recover(nil, "instance_id", instanceID, "tenant_id", inst.tenantID)
 	if err := inst.handler.HandleWebhookEvent(inst.ctx, body); err != nil {
 		slog.Error("zalo_webhook.handler_error",

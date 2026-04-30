@@ -35,6 +35,33 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
+func TestExtFromURL_AcceptsAnySafeExt(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in, want string
+	}{
+		{"https://cdn.example/foo.jpg", ".jpg"},
+		{"https://cdn.example/foo.JPEG", ".jpeg"},
+		{"https://cdn.example/foo.pdf?token=abc", ".pdf"},
+		{"https://cdn.example/foo.docx", ".docx"},
+		{"https://cdn.example/foo.mp4", ".mp4"},
+		{"https://cdn.example/foo.m4a", ".m4a"},
+		{"https://cdn.example/foo.zip", ".zip"},
+		{"https://cdn.example/foo.webp", ".webp"},
+		{"https://cdn.example/foo", ".bin"},
+		{"https://cdn.example/foo.weirdest", ".bin"},
+		{"https://cdn.example/foo.sh-bad", ".bin"},
+		{"https://cdn.example/foo.x.y", ".y"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := extFromURL(tc.in); got != tc.want {
+				t.Errorf("extFromURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSendFile_RejectsZeroBytes(t *testing.T) {
 	t.Parallel()
 	api, captured, _ := newAPIServer(t, apiServerOpts{})

@@ -21,7 +21,7 @@ func StripMarkdown(text string) string {
 	text = reBoldItalicStar.ReplaceAllString(text, "$1")
 	text = reBoldItalicUnder.ReplaceAllString(text, "$1")
 	text = reBoldStar.ReplaceAllString(text, "$1")
-	text = reBoldUnder.ReplaceAllString(text, "$1")
+	text = reBoldUnder.ReplaceAllStringFunc(text, stripBoldUnder)
 	text = reStrikethrough.ReplaceAllString(text, "$1")
 	text = reHeader.ReplaceAllString(text, "$1")
 	text = reHorizontalRule.ReplaceAllString(text, "")
@@ -48,4 +48,16 @@ var (
 	reBullet          = regexp.MustCompile(`(?m)^(\s*)[-*+]\s+`)
 
 	reExcessiveNewlines = regexp.MustCompile(`\n{3,}`)
+
+	reIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
+
+// stripBoldUnder strips __bold__ but preserves identifier-shaped content like
+// __init__ / __name__ where the underscores are part of the token, not markup.
+func stripBoldUnder(match string) string {
+	inner := match[2 : len(match)-2]
+	if reIdentifier.MatchString(inner) {
+		return match
+	}
+	return inner
+}

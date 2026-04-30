@@ -193,9 +193,18 @@ func extFromURL(fileURL string) string {
 	if i := strings.IndexByte(path, '?'); i >= 0 {
 		path = path[:i]
 	}
-	ext := filepath.Ext(path)
-	if ext == "" || len(ext) > 6 {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == "" || len(ext) > 8 || !isSafeExt(ext) {
 		return ".bin"
 	}
 	return ext
+}
+
+func isSafeExt(ext string) bool {
+	for _, r := range ext[1:] {
+		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }
