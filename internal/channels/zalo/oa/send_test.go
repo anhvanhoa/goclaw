@@ -142,7 +142,7 @@ func TestSendText_HappyPath(t *testing.T) {
 	refresh, _ := newRefreshServer(t, "")
 	c := newSendChannel(t, api, refresh, &fakeStore{})
 
-	mid, err := c.SendText(context.Background(), "user-1", "hello")
+	mid, err := c.SendText(context.Background(), "user-1", "hello", "")
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestSendText_ChunksLongMessages(t *testing.T) {
 		bldr.WriteString("\n\n")
 	}
 	long := bldr.String()
-	mid, err := c.SendText(context.Background(), "user-1", long)
+	mid, err := c.SendText(context.Background(), "user-1", long, "")
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestSendText_AuthErrorRetriesOnce(t *testing.T) {
 	refresh, refreshCount := newRefreshServer(t, "")
 	c := newSendChannel(t, api, refresh, &fakeStore{})
 
-	mid, err := c.SendText(context.Background(), "user-1", "hi")
+	mid, err := c.SendText(context.Background(), "user-1", "hi", "")
 	if err != nil {
 		t.Fatalf("SendText: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestSendText_AuthErrorTwice_FailsCleanly(t *testing.T) {
 	refresh, _ := newRefreshServer(t, "")
 	c := newSendChannel(t, api, refresh, &fakeStore{})
 
-	_, err := c.SendText(context.Background(), "user-1", "hi")
+	_, err := c.SendText(context.Background(), "user-1", "hi", "")
 	if err == nil {
 		t.Fatal("expected error after second auth failure")
 	}
@@ -288,7 +288,7 @@ func TestSendText_NonAuthErrorNoRetry(t *testing.T) {
 	refresh, _ := newRefreshServer(t, "")
 	c := newSendChannel(t, api, refresh, &fakeStore{})
 
-	_, err := c.SendText(context.Background(), "user-1", "hi")
+	_, err := c.SendText(context.Background(), "user-1", "hi", "")
 	if err == nil {
 		t.Fatal("expected error")
 	}

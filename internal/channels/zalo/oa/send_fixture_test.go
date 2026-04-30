@@ -34,9 +34,17 @@ func TestSend_WireShape_Fixtures(t *testing.T) {
 		{
 			name: "SendText",
 			call: func(c *Channel) (string, error) {
-				return c.SendText(context.Background(), "user-fixture", "hello fixture")
+				return c.SendText(context.Background(), "user-fixture", "hello fixture", "")
 			},
 			wantReqFixture: "testdata/send_text_request.json",
+			wantMID:        "msg-fixture-1",
+		},
+		{
+			name: "SendText_Quote",
+			call: func(c *Channel) (string, error) {
+				return c.SendText(context.Background(), "186729651760683225", "Chào bạn", "48687128d04c9410cd5f")
+			},
+			wantReqFixture: "testdata/send_text_quote_request.json",
 			wantMID:        "msg-fixture-1",
 		},
 		{
