@@ -217,14 +217,18 @@ func (d *gatewayDeps) runLifecycle(
 			zaloPrefixMounted = true
 		}
 	}
-	// Suppress http.ServeMux 301 redirect from bare /channels/zalo/webhook to
-	// /channels/zalo/webhook/. Operators who paste the prefix without a slug
-	// get a clean 404 instead of leaking the prefix path.
-	if zaloPrefixMounted {
-		mux.HandleFunc(zalocommon.WebhookPathBare, func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "not found", http.StatusNotFound)
-		})
+	// Always mount the Zalo webhook prefix so wizard-created channels added
+	// after boot are reachable without restart. The shared router 404s
+	// unknown slugs, so an unmounted-yet-registered channel never silently
+	// drops. Bare /channels/zalo/webhook always returns 404 to avoid the
+	// http.ServeMux 301 redirect leaking the prefix path.
+	if !zaloPrefixMounted {
+		mux.Handle(zalocommon.WebhookPathPrefix, zalocommon.SharedRouter())
+		slog.Info("webhook route mounted on gateway", "path", zalocommon.WebhookPathPrefix, "source", "shared_router_default")
 	}
+	mux.HandleFunc(zalocommon.WebhookPathBare, func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
 
 	tsCleanup := initTailscale(ctx, d.cfg, mux)
 	if tsCleanup != nil {

@@ -105,6 +105,7 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 		transport:     transport,
 		webhookPath:   cfg.WebhookPath,
 		webhookSecret: cfg.WebhookSecret,
+		webhookRouter: common.SharedRouter(),
 	}
 	ch.SetPairingService(pairingSvc)
 	return ch, nil

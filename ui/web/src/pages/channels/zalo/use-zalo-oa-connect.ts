@@ -88,6 +88,14 @@ export function useZaloOAConnect(
   const [copied, setCopied] = useState(false);
   const [done, setDone] = useState(false);
   const firedRef = useRef(false);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   // Fetch consent URL once the flow becomes active.
   useEffect(() => {
@@ -95,6 +103,7 @@ export function useZaloOAConnect(
     consent
       .call({ instance_id: instanceId })
       .then((resp) => {
+        if (!aliveRef.current) return;
         setUrl(resp.url);
         setState(resp.state);
       })
@@ -162,6 +171,7 @@ export function useZaloOAConnect(
         params.oa_id = oaID;
       }
       const resp = await exchange.call(params);
+      if (!aliveRef.current) return;
       if (resp?.ok) setDone(true);
     } catch {
       // error captured on exchange.error

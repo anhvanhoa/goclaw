@@ -7,7 +7,6 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
-	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -38,7 +37,6 @@ func Factory(ciStore store.ChannelInstanceStore) channels.ChannelFactory {
 		if err != nil {
 			return nil, err
 		}
-		ch.webhookRouter = common.SharedRouter()
 		// Seed cursor from persisted channel_instances.config.poll_cursor.
 		if seeded := parseCursorFromConfig(cfgRaw); len(seeded) > 0 {
 			ch.cursor.loadFromMap(seeded)

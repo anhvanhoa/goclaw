@@ -590,20 +590,22 @@ delivery is failing, no polling will retrieve missed messages unless
 ### Webhook setup (operator walkthrough)
 
 1. Toggle the instance to `transport: "webhook"`. For OA, also set
-   `webhook_oa_secret_key` to the signing secret from the Zalo developer
-   console (distinct from the OAuth `secret_key` credential — see Common
-   pitfalls below). For Bot, set `webhook_secret` (used as
-   `X-Bot-Api-Secret-Token`).
+   `webhook_secret_key` (in the credentials blob) to the signing secret
+   from the Zalo developer console — distinct from the OAuth `secret_key`
+   credential, see Common pitfalls below. For Bot, set `webhook_secret`
+   (used as `X-Bot-Api-Secret-Token`).
 2. Reload the channel instance (toggle `enabled` off/on, or restart
-   gateway). The channel registers itself with the shared router at
-   `/channels/zalo/webhook` and starts accepting POSTs.
+   gateway). The channel registers itself with the shared router under
+   `/channels/zalo/webhook/<slug>` and starts accepting POSTs. The slug
+   is derived from the instance name (e.g. `my-oa`) or the explicit
+   `webhook_path` config field.
 3. Call the WS RPC `channels.instances.zalo.webhook_url` with
    `instance_id`. Response: `{path, instance_id, hint}`. Path is, e.g.,
-   `/channels/zalo/webhook?instance=<uuid>` — there is **no** PublicBaseURL
-   field in gateway config, so the RPC returns the path fragment only.
+   `/channels/zalo/webhook/my-oa` — there is **no** PublicBaseURL field
+   in gateway config, so the RPC returns the path fragment only.
 4. Prepend your gateway's externally-reachable host to the path
-   (e.g., `https://gw.example.com/channels/zalo/webhook?instance=<uuid>`)
-   and register that full URL in the Zalo dev console.
+   (e.g., `https://gw.example.com/channels/zalo/webhook/my-oa`) and
+   register that full URL in the Zalo dev console.
 5. Send a test event from the Zalo console; the gateway logs
    `zalo_oa.webhook.event_received` (or the bot equivalent). If you see
    `security.zalo_webhook_signature_mismatch`, the secret on the gateway
@@ -673,12 +675,12 @@ the channel's catch-up WaitGroup.
 
 ### Common pitfalls
 
-- **Two secrets on OA**: `creds.secret_key` (OAuth refresh credential,
-  encrypted in the credentials blob) is **distinct** from
-  `cfg.webhook_oa_secret_key` (signing key from the dev console webhook
-  panel). Mixing them silently breaks signature verification.
-- **Webhook URL leaks the instance UUID**: this is acceptable — the UUID
-  alone gives no access without the matching signature secret. Treat the
+- **Two secrets on OA**: `creds.secret_key` (OAuth refresh credential)
+  is **distinct** from `creds.webhook_secret_key` (signing key from the
+  dev console webhook panel). Both live in the encrypted credentials
+  blob. Mixing them silently breaks signature verification.
+- **Webhook URL exposes the slug**: this is acceptable — the slug alone
+  gives no access without the matching signature secret. Treat the
   webhook URL as semi-secret; rotation requires unregister + re-register
   on the Zalo console.
 - **Operability signals**: watch for `zalo_webhook.handler_error`
@@ -700,12 +702,18 @@ Polling (default) — Zalo OA:
 }
 ```
 
-Webhook — Zalo OA:
+Webhook — Zalo OA (the signing secret lives in credentials, not config):
 
 ```json5
+// credentials
+{
+  "app_id": "<from-zalo-dev-console>",
+  "secret_key": "<oauth-app-secret>",
+  "webhook_secret_key": "<from-zalo-dev-console-webhook-panel>"
+}
+// config
 {
   "transport": "webhook",
-  "webhook_oa_secret_key": "<from-zalo-dev-console>",
   "webhook_signature_mode": "strict",
   "webhook_replay_window_seconds": 300,
   "catch_up_on_restart": true

@@ -57,7 +57,8 @@ func (m *ZaloOAMethods) Register(router *gateway.MethodRouter) {
 }
 
 // handleConsentURL builds the Zalo authorization URL server-side so the
-// frontend never receives app_id (which is masked in maskInstance anyway).
+// frontend doesn't have to assemble the OAuth URL itself; the response
+// only echoes the URL plus a state token.
 func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {

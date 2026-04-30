@@ -6,7 +6,6 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
-	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -65,7 +64,6 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
-	ch.webhookRouter = common.SharedRouter()
 	ch.SetName(name)
 	return ch, nil
 }

@@ -61,6 +61,15 @@ func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) err
 		return nil
 	}
 
+	// Advance the per-sender cursor so a post-restart catch-up sweep skips
+	// messages already delivered via webhook. Webhook + catchup share the
+	// same dedup key (cursor timestamp) so overlap is harmless.
+	if e.Sender.ID != "" {
+		if ts, err := extractTimestamp(raw); err == nil && ts > 0 {
+			c.cursor.Advance(e.Sender.ID, ts)
+		}
+	}
+
 	switch e.EventName {
 	case "user_send_text":
 		c.dispatchWebhookText(&e)

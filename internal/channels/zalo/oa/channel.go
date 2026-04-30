@@ -97,6 +97,7 @@ func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 		pollInterval:         pollIntervalFromCfg(cfg.PollIntervalSeconds),
 		safetyTickerInterval: tickerInterval(cfg.SafetyTickerMinutes),
 		stopCh:               make(chan struct{}),
+		webhookRouter:        common.SharedRouter(),
 	}
 	c.tokens = &tokenSource{
 		client: c.client,

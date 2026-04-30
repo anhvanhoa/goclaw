@@ -75,7 +75,14 @@ func (c *Channel) flushCursor(ctx context.Context) error {
 	if c.ciStore == nil || c.instanceID == [16]byte{} {
 		return errors.New("zalo_oa: cursor flush without store/instance ID")
 	}
-	patch := map[string]any{configCursorKey: c.cursor.Snapshot()}
+	snapshot := c.cursor.Snapshot()
+	// Guard against total LRU eviction wiping the persisted cursor:
+	// MergeConfig is shallow merge, so {"poll_cursor":{}} would clobber.
+	if len(snapshot) == 0 {
+		c.cursor.ClearDirty()
+		return nil
+	}
+	patch := map[string]any{configCursorKey: snapshot}
 	if err := c.ciStore.MergeConfig(ctx, c.instanceID, patch); err != nil {
 		return fmt.Errorf("merge cursor into config: %w", err)
 	}
