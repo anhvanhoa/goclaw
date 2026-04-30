@@ -178,10 +178,12 @@ func (c *Channel) Start(_ context.Context) error {
 	c.tickerWG.Add(1)
 	go c.runSafetyTicker()
 
-	transport := c.cfg.Transport
-	if transport == "" {
-		transport = "webhook"
+	// Normalize on cfg so Stop's transport check matches Start's effective
+	// value — otherwise default-init channels leak the router registration.
+	if c.cfg.Transport == "" {
+		c.cfg.Transport = "webhook"
 	}
+	transport := c.cfg.Transport
 	switch transport {
 	case "webhook":
 		return c.startWebhookTransport()
