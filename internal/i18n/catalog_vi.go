@@ -247,6 +247,7 @@ func init() {
 		MsgZaloOAErrRate:              "Quota Zalo đã hết (mã %d: %s); chờ cửa sổ quota làm mới",
 		MsgZaloOAErrServer:            "Zalo trả về lỗi server tạm thời (mã %d: %s); thử lại sau",
 		MsgZaloOAErrRedirectURI:       "Zalo từ chối OAuth redirect_uri (mã %d: %s); cập nhật redirect URI trong Zalo console khớp với cấu hình kênh",
+		MsgZaloOAReauthDueSoon:        "Refresh token sẽ hết hạn trong %d ngày; vui lòng cấp quyền lại OA để tránh gián đoạn",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",

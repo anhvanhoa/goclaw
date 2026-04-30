@@ -580,7 +580,7 @@
     "dialogDescription": "Authorize the Official Account, then paste the redirect URL from your browser.",
     "step1Heading": "Step 1 — Authorize",
     "step2Heading": "Step 2 — Paste callback URL",
-    "authorizeHelp": "Open the URL below (use the arrow icon), sign in to Zalo and approve access for the Official Account. After approving, your browser lands on the redirect URI — leave that tab open for Step 2.",
+    "authorizeHelp": "Open the URL below, sign in to Zalo, and approve access for the Official Account. After you approve, your browser redirects to a callback URL — copy the full URL from the address bar and paste it into Step 2 below.",
     "consentLoading": "Generating consent URL…",
     "consentFailed": "Failed to fetch consent URL",
     "pasteHelp": "After approving, copy the full URL from your browser's address bar and paste it here.",

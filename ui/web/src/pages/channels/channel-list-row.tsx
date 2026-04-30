@@ -1,4 +1,4 @@
-import { QrCode, Radio, Trash2 } from "lucide-react";
+import { KeyRound, QrCode, Radio, Trash2, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,12 @@ import {
   getChannelStatusMeta,
 } from "./channels-status-view";
 import { channelsWithAuth } from "./channel-wizard-registry";
+
+const REAUTH_ICONS: Record<string, LucideIcon> = {
+  zalo_personal: QrCode,
+  zalo_oa: KeyRound,
+  whatsapp: QrCode,
+};
 
 interface ChannelListRowProps {
   instance: ChannelInstanceData;
@@ -55,6 +61,7 @@ export function ChannelListRow({
     t("list.openChannelDetail", {
       defaultValue: "Open channel detail for the latest diagnosis",
     });
+  const ReauthIcon = REAUTH_ICONS[instance.channel_type] ?? QrCode;
 
   return (
     <div
@@ -133,7 +140,7 @@ export function ChannelListRow({
                 onAuth();
               }}
             >
-              <QrCode className="h-3.5 w-3.5" />
+              <ReauthIcon className="h-3.5 w-3.5" />
             </Button>
           )}
           {onDelete && !instance.is_default && (

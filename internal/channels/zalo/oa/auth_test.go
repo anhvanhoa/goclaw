@@ -200,3 +200,94 @@ func TestTokenResponseShape_GuardsTagDrift(t *testing.T) {
 		t.Errorf("string form: ExpiresIn = %d, want 3600", resp2.ExpiresIn)
 	}
 }
+
+// Captures Zalo's refresh_token_expires_in across the response shapes we have
+// seen in the wild (string + numeric) and the omitted case (legacy / shape drift).
+func TestTokenCall_CapturesRefreshExpiry(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		body      string
+		wantSet   bool
+		wantSecs  int64
+	}{
+		{
+			name:     "string_form",
+			body:     `{"access_token":"AT","refresh_token":"RT","expires_in":"3600","refresh_token_expires_in":"7776000"}`,
+			wantSet:  true,
+			wantSecs: 7776000,
+		},
+		{
+			name:     "numeric_form",
+			body:     `{"access_token":"AT","refresh_token":"RT","expires_in":3600,"refresh_token_expires_in":2592000}`,
+			wantSet:  true,
+			wantSecs: 2592000,
+		},
+		{
+			name:    "omitted",
+			body:    `{"access_token":"AT","refresh_token":"RT","expires_in":3600}`,
+			wantSet: false,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv, _ := newAuthServer(t, "k", "authorization_code", tc.body, http.StatusOK)
+			c := NewClient(5 * time.Second)
+			c.oauthBase = srv.URL
+
+			before := time.Now()
+			tok, err := c.ExchangeCode(context.Background(), "app", "k", "code")
+			if err != nil {
+				t.Fatalf("ExchangeCode: %v", err)
+			}
+			if tc.wantSet {
+				if tok.RefreshTokenExpiresAt.IsZero() {
+					t.Fatalf("RefreshTokenExpiresAt should be set")
+				}
+				wantExp := before.Add(time.Duration(tc.wantSecs) * time.Second)
+				delta := tok.RefreshTokenExpiresAt.Sub(wantExp)
+				if delta < -2*time.Second || delta > 2*time.Second {
+					t.Errorf("RefreshTokenExpiresAt = %v, want ≈ %v (delta %v)", tok.RefreshTokenExpiresAt, wantExp, delta)
+				}
+			} else {
+				if !tok.RefreshTokenExpiresAt.IsZero() {
+					t.Errorf("RefreshTokenExpiresAt should be zero, got %v", tok.RefreshTokenExpiresAt)
+				}
+			}
+		})
+	}
+}
+
+// WithTokens must NOT zero a previously set RefreshTokenExpiresAt if the
+// freshly returned Tokens omits the field — guards against transient Zalo
+// shape drift wiping out the warning deadline.
+func TestWithTokens_PreservesRefreshExpiryWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	prev := time.Now().UTC().Add(60 * 24 * time.Hour)
+	c := &ChannelCreds{RefreshTokenExpiresAt: prev}
+	c.WithTokens(&Tokens{
+		AccessToken:  "AT",
+		RefreshToken: "RT",
+		ExpiresAt:    time.Now().UTC().Add(time.Hour),
+		// RefreshTokenExpiresAt: zero
+	})
+	if !c.RefreshTokenExpiresAt.Equal(prev) {
+		t.Errorf("RefreshTokenExpiresAt = %v, want preserved %v", c.RefreshTokenExpiresAt, prev)
+	}
+
+	// And it MUST overwrite when a fresh value is provided.
+	next := time.Now().UTC().Add(90 * 24 * time.Hour)
+	c.WithTokens(&Tokens{
+		AccessToken:           "AT2",
+		RefreshToken:          "RT2",
+		ExpiresAt:             time.Now().UTC().Add(time.Hour),
+		RefreshTokenExpiresAt: next,
+	})
+	if !c.RefreshTokenExpiresAt.Equal(next) {
+		t.Errorf("RefreshTokenExpiresAt = %v, want overwritten to %v", c.RefreshTokenExpiresAt, next)
+	}
+}

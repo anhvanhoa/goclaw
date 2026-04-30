@@ -203,6 +203,35 @@ func TestAccess_StaleTokenTriggersExactlyOneRefresh(t *testing.T) {
 	}
 }
 
+// Refresh propagates refresh_token_expires_in into ChannelCreds so the
+// safety ticker can light a re-consent warning ahead of expiry.
+func TestAccess_PropagatesRefreshTokenExpiry(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// 90 days = 7776000s, matches Zalo's documented refresh_token lifespan.
+		_, _ = w.Write([]byte(`{"access_token":"AT-1","refresh_token":"RT-1","expires_in":3600,"refresh_token_expires_in":"7776000"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	fs := &fakeStore{}
+	ts := newTokenSourceForTest(t, srv.URL, time.Now().Add(time.Minute), fs)
+
+	before := time.Now()
+	if _, err := ts.Access(context.Background()); err != nil {
+		t.Fatalf("Access: %v", err)
+	}
+	got := ts.creds.RefreshTokenExpiresAt
+	if got.IsZero() {
+		t.Fatal("RefreshTokenExpiresAt is zero, expected ~90d ahead")
+	}
+	want := before.Add(7776000 * time.Second)
+	delta := got.Sub(want)
+	if delta < -2*time.Second || delta > 2*time.Second {
+		t.Errorf("RefreshTokenExpiresAt = %v, want ≈ %v (delta %v)", got, want, delta)
+	}
+}
+
 // Single-flight: 10 concurrent Access() calls on a stale token must result
 // in exactly ONE upstream refresh call. Mirrors DBTokenSource.Token() single-mutex pattern.
 func TestAccess_SingleFlightUnderConcurrency(t *testing.T) {

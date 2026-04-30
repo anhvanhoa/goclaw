@@ -247,6 +247,7 @@ func init() {
 		MsgZaloOAErrRate:              "Zalo 配额已耗尽(代码 %d:%s);请等待配额窗口重置",
 		MsgZaloOAErrServer:            "Zalo 返回临时服务器错误(代码 %d:%s);请稍后重试",
 		MsgZaloOAErrRedirectURI:       "Zalo 拒绝 OAuth redirect_uri(代码 %d:%s);请在 Zalo 控制台更新 redirect URI 以匹配渠道配置",
+		MsgZaloOAReauthDueSoon:        "Refresh Token 将在 %d 天后到期,请重新授权 OA 以避免中断",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",

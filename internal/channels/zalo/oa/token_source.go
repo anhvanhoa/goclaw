@@ -83,6 +83,11 @@ func (ts *tokenSource) doRefresh(ctx context.Context) error {
 		return err
 	}
 	*ts.creds = snapshot
-	slog.Info("zalo_oa.token_refreshed", "instance_id", ts.instanceID, "oa_id", ts.creds.OAID, "new_expires_at", ts.creds.ExpiresAt)
+	slog.Info("zalo_oa.token_refreshed",
+		"instance_id", ts.instanceID,
+		"oa_id", ts.creds.OAID,
+		"new_expires_at", ts.creds.ExpiresAt,
+		"refresh_expires_at", ts.creds.RefreshTokenExpiresAt,
+	)
 	return nil
 }

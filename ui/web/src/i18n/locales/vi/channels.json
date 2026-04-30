@@ -464,7 +464,7 @@
     "dialogTitle": "Kết nối Zalo OA — {{name}}",
     "dialogDescription": "Cấp quyền cho Official Account, sau đó dán URL chuyển hướng từ trình duyệt.",
     "step1Heading": "Bước 1 — Cấp quyền",
-    "authorizeHelp": "Mở liên kết bên dưới (bấm biểu tượng mũi tên), đăng nhập Zalo và cấp quyền cho Official Account. Sau khi cấp quyền, trình duyệt sẽ chuyển tới Redirect URI — hãy giữ tab đó để dùng cho Bước 2.",
+    "authorizeHelp": "Mở liên kết bên dưới, đăng nhập Zalo và cấp quyền cho Official Account. Sau khi cấp quyền, trình duyệt sẽ chuyển sang URL callback — sao chép toàn bộ URL từ thanh địa chỉ và dán vào Bước 2 bên dưới.",
     "step2Heading": "Bước 2 — Dán URL callback",
     "consentLoading": "Đang tạo URL cấp quyền…",
     "consentFailed": "Không thể lấy URL cấp quyền",

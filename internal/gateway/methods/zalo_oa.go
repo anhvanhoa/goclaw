@@ -190,7 +190,12 @@ func (m *ZaloOAMethods) handleExchangeCode(ctx context.Context, client *gateway.
 	}
 	m.emitCacheInvalidate()
 
-	slog.Info("zalo_oa.connected", "instance_id", instID, "oa_id", creds.OAID, "expires_at", tok.ExpiresAt)
+	slog.Info("zalo_oa.connected",
+		"instance_id", instID,
+		"oa_id", creds.OAID,
+		"expires_at", tok.ExpiresAt,
+		"refresh_expires_at", tok.RefreshTokenExpiresAt,
+	)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":         true,
 		"oa_id":      creds.OAID,

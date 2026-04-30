@@ -38,15 +38,17 @@ func classifyRefreshError(err error) error {
 
 // Tokens is the parsed OAuth response.
 type Tokens struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    time.Time
+	AccessToken           string
+	RefreshToken          string
+	ExpiresAt             time.Time
+	RefreshTokenExpiresAt time.Time // zero if Zalo omits refresh_token_expires_in
 }
 
 type tokenResponse struct {
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	ExpiresIn    flexSeconds `json:"expires_in"`
+	AccessToken           string      `json:"access_token"`
+	RefreshToken          string      `json:"refresh_token"`
+	ExpiresIn             flexSeconds `json:"expires_in"`
+	RefreshTokenExpiresIn flexSeconds `json:"refresh_token_expires_in"`
 }
 
 // flexSeconds accepts either a JSON number or a quoted string for
@@ -102,10 +104,15 @@ func (c *Client) tokenCall(ctx context.Context, secretKey string, form url.Value
 		return nil, fmt.Errorf("zalo oauth: empty access_token in response")
 	}
 	exp := time.Now().UTC().Add(time.Duration(resp.ExpiresIn) * time.Second)
+	var refreshExp time.Time
+	if resp.RefreshTokenExpiresIn > 0 {
+		refreshExp = time.Now().UTC().Add(time.Duration(resp.RefreshTokenExpiresIn) * time.Second)
+	}
 	return &Tokens{
-		AccessToken:  resp.AccessToken,
-		RefreshToken: resp.RefreshToken,
-		ExpiresAt:    exp,
+		AccessToken:           resp.AccessToken,
+		RefreshToken:          resp.RefreshToken,
+		ExpiresAt:             exp,
+		RefreshTokenExpiresAt: refreshExp,
 	}, nil
 }
 

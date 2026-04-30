@@ -30,10 +30,11 @@ type ChannelCreds struct {
 	// X-ZEvent-Signature headers when Transport=webhook.
 	WebhookSecretKey string `json:"webhook_secret_key,omitempty"`
 
-	AccessToken   string    `json:"access_token,omitempty"`
-	RefreshToken  string    `json:"refresh_token,omitempty"`
-	ExpiresAt     time.Time `json:"expires_at"`
-	LastRefreshAt time.Time `json:"last_refresh_at"`
+	AccessToken           string    `json:"access_token,omitempty"`
+	RefreshToken          string    `json:"refresh_token,omitempty"`
+	ExpiresAt             time.Time `json:"expires_at"`
+	RefreshTokenExpiresAt time.Time `json:"refresh_token_expires_at,omitempty"`
+	LastRefreshAt         time.Time `json:"last_refresh_at"`
 }
 
 // LoadCreds parses plaintext credentials JSON.
@@ -51,10 +52,15 @@ func (c *ChannelCreds) Marshal() (json.RawMessage, error) {
 }
 
 // WithTokens copies new tokens onto the receiver and stamps LastRefreshAt.
+// Preserves a previously set RefreshTokenExpiresAt if Zalo omits the field on
+// this particular response — a one-time omission must not blank the deadline.
 func (c *ChannelCreds) WithTokens(tok *Tokens) {
 	c.AccessToken = tok.AccessToken
 	c.RefreshToken = tok.RefreshToken
 	c.ExpiresAt = tok.ExpiresAt
+	if !tok.RefreshTokenExpiresAt.IsZero() {
+		c.RefreshTokenExpiresAt = tok.RefreshTokenExpiresAt
+	}
 	c.LastRefreshAt = time.Now().UTC()
 }
 
