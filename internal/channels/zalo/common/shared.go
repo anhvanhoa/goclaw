@@ -1,8 +1,13 @@
 package common
 
-// WebhookPath is the single mount point for both Zalo channel flavors;
-// per-instance dispatch uses the ?instance=<uuid> query param.
-const WebhookPath = "/channels/zalo/webhook"
+// WebhookPathPrefix is the single mount point for both Zalo channel flavors.
+// Per-instance dispatch reads the slug suffix (e.g. "/channels/zalo/webhook/my-oa").
+// The trailing slash makes ServeMux treat this as a prefix match.
+const WebhookPathPrefix = "/channels/zalo/webhook/"
+
+// WebhookPathBare is the no-slash form. Mount an explicit 404 handler here so
+// http.ServeMux doesn't auto-301 to WebhookPathPrefix.
+const WebhookPathBare = "/channels/zalo/webhook"
 
 var sharedRouter = NewRouter()
 

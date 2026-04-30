@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,21 +19,24 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/safego"
 )
 
-// Router dispatches webhook POSTs to registered Zalo channel instances.
-// Channels register at Start() and unregister at Stop(); the process-global
-// router (shared.go) is mounted once on the mux via MountRoute().
+// Router dispatches webhook POSTs to registered Zalo channel instances by
+// path-suffix slug. Channels register at Start() and unregister at Stop();
+// the process-global router (shared.go) is mounted once on the mux via
+// MountRoute() at the WebhookPathPrefix prefix.
 type Router struct {
-	mu          sync.RWMutex
-	instances   map[uuid.UUID]*registeredInstance
-	dedup       *Dedup
-	rateLimiter *channels.WebhookRateLimiter
-	maxBodySize int64
+	mu              sync.RWMutex
+	instances       map[uuid.UUID]*registeredInstance
+	slugToInstance  map[string]uuid.UUID
+	instanceToSlug  map[uuid.UUID]string
+	dedup           *Dedup
+	rateLimiter     *channels.WebhookRateLimiter
+	maxBodySize     int64
 
 	routeMu      sync.Mutex
 	routeHandled bool
 }
 
-// MountRoute returns (WebhookPath, r) on the first call across the shared
+// MountRoute returns (WebhookPathPrefix, r) on the first call across the shared
 // router and ("", nil) afterwards. Sticky across instance_loader.Reload
 // because http.ServeMux would panic on re-mount.
 func (r *Router) MountRoute() (string, http.Handler) {
@@ -39,7 +44,7 @@ func (r *Router) MountRoute() (string, http.Handler) {
 	defer r.routeMu.Unlock()
 	if !r.routeHandled {
 		r.routeHandled = true
-		return WebhookPath, r
+		return WebhookPathPrefix, r
 	}
 	return "", nil
 }
@@ -82,6 +87,10 @@ type MessageIDExtractor interface {
 // router maps it to 401.
 var ErrSignatureMismatch = errors.New("zalo_common: webhook signature mismatch")
 
+// ErrSlugCollision is returned by RegisterInstance when two channels claim
+// the same slug. Caller should MarkFailed with kind=config.
+var ErrSlugCollision = errors.New("zalo_common: webhook slug already in use")
+
 const (
 	defaultDedupTTL     = 5 * time.Minute
 	defaultDedupMax     = 1000
@@ -91,16 +100,23 @@ const (
 // NewRouter returns a router with default dedup and rate-limit params.
 func NewRouter() *Router {
 	return &Router{
-		instances:   make(map[uuid.UUID]*registeredInstance),
-		dedup:       NewDedup(defaultDedupTTL, defaultDedupMax),
-		rateLimiter: channels.NewWebhookRateLimiter(),
-		maxBodySize: defaultMaxBodyBytes,
+		instances:      make(map[uuid.UUID]*registeredInstance),
+		slugToInstance: make(map[string]uuid.UUID),
+		instanceToSlug: make(map[uuid.UUID]string),
+		dedup:          NewDedup(defaultDedupTTL, defaultDedupMax),
+		rateLimiter:    channels.NewWebhookRateLimiter(),
+		maxBodySize:    defaultMaxBodyBytes,
 	}
 }
 
-// RegisterInstance enrolls a channel for routing. The per-instance ctx
-// is cancelled by UnregisterInstance so dispatch goroutines bail promptly.
-func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.UUID) {
+// RegisterInstance enrolls a channel for routing under the given slug.
+// Returns ErrSlugInvalid for malformed slugs, ErrSlugCollision when
+// another channel already owns the slug. The per-instance ctx is cancelled
+// by UnregisterInstance so dispatch goroutines bail promptly.
+func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.UUID, slug string) error {
+	if err := ValidateSlug(slug); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	inst := &registeredInstance{
 		handler:  h,
@@ -109,8 +125,19 @@ func (r *Router) RegisterInstance(id uuid.UUID, h WebhookHandler, tenantID uuid.
 		cancel:   cancel,
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.slugToInstance[slug]; ok && existing != id {
+		cancel()
+		return fmt.Errorf("%w: slug %q already registered", ErrSlugCollision, slug)
+	}
+	// Re-register under same id: clear old slug mapping if it changed.
+	if oldSlug, ok := r.instanceToSlug[id]; ok && oldSlug != slug {
+		delete(r.slugToInstance, oldSlug)
+	}
 	r.instances[id] = inst
-	r.mu.Unlock()
+	r.slugToInstance[slug] = id
+	r.instanceToSlug[id] = slug
+	return nil
 }
 
 // UnregisterInstance removes the channel and cancels its dispatch ctx.
@@ -119,17 +146,25 @@ func (r *Router) UnregisterInstance(id uuid.UUID) {
 	r.mu.Lock()
 	inst, ok := r.instances[id]
 	delete(r.instances, id)
+	if slug, hasSlug := r.instanceToSlug[id]; hasSlug {
+		delete(r.slugToInstance, slug)
+		delete(r.instanceToSlug, id)
+	}
 	r.mu.Unlock()
 	if ok && inst.cancel != nil {
 		inst.cancel()
 	}
 }
 
-func (r *Router) lookup(id uuid.UUID) (*registeredInstance, bool) {
+func (r *Router) lookupBySlug(slug string) (uuid.UUID, *registeredInstance, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	id, ok := r.slugToInstance[slug]
+	if !ok {
+		return uuid.Nil, nil, false
+	}
 	inst, ok := r.instances[id]
-	return inst, ok
+	return id, inst, ok
 }
 
 // ServeHTTP returns 200 once dispatch reaches the handler — Zalo retries
@@ -141,21 +176,26 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	instanceStr := req.URL.Query().Get("instance")
-	instanceID, err := uuid.Parse(instanceStr)
-	if err != nil {
-		http.Error(w, "bad instance", http.StatusBadRequest)
+	suffix := strings.TrimPrefix(req.URL.Path, WebhookPathPrefix)
+	// Reject empty suffix and any nested path / traversal attempt.
+	if suffix == "" || strings.Contains(suffix, "/") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := ValidateSlug(suffix); err != nil {
+		// Path doesn't conform to slug grammar — treat as not found.
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	instanceID, inst, ok := r.lookupBySlug(suffix)
+	if !ok {
+		http.Error(w, "unknown instance", http.StatusNotFound)
 		return
 	}
 
 	if !r.rateLimiter.Allow(instanceID.String()) {
 		http.Error(w, "rate limited", http.StatusTooManyRequests)
-		return
-	}
-
-	inst, ok := r.lookup(instanceID)
-	if !ok {
-		http.Error(w, "unknown instance", http.StatusNotFound)
 		return
 	}
 
@@ -168,6 +208,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if err := inst.handler.SignatureVerifier().Verify(req.Header, body); err != nil {
 		slog.Warn("security.zalo_webhook_signature_mismatch",
 			"instance_id", instanceID,
+			"slug", suffix,
 			"remote", req.RemoteAddr,
 			"err", err)
 		http.Error(w, "signature mismatch", http.StatusUnauthorized)

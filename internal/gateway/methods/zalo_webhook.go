@@ -3,12 +3,12 @@ package methods
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
+	zalooa "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/oa"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -57,10 +57,35 @@ func (m *ZaloWebhookMethods) handleWebhookURL(ctx context.Context, client *gatew
 		return
 	}
 
-	path := fmt.Sprintf("%s?instance=%s", common.WebhookPath, instID)
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	slug := resolveWebhookSlug(inst)
+	path := common.WebhookPathPrefix + slug
+	resp := map[string]any{
 		"path":        path,
+		"slug":        slug,
 		"instance_id": instID.String(),
 		"hint":        i18n.T(locale, i18n.MsgZaloWebhookPathHint),
-	}))
+	}
+	// For zalo_oa, surface the auto-discovered OA ID read-only so operators
+	// can confirm the connect handshake landed without re-checking creds.
+	if inst.ChannelType == channels.TypeZaloOA {
+		if creds, err := zalooa.LoadCreds(inst.Credentials); err == nil && creds.OAID != "" {
+			resp["oa_id"] = creds.OAID
+		}
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, resp))
+}
+
+// resolveWebhookSlug reads the webhook_path config field; if absent, derives
+// from instance name so the RPC matches what the channel registers at Start.
+func resolveWebhookSlug(inst *store.ChannelInstanceData) string {
+	var cfg struct {
+		WebhookPath string `json:"webhook_path,omitempty"`
+	}
+	if len(inst.Config) > 0 {
+		_ = json.Unmarshal(inst.Config, &cfg)
+	}
+	if cfg.WebhookPath != "" {
+		return cfg.WebhookPath
+	}
+	return common.DeriveSlugFromName(inst.Name)
 }

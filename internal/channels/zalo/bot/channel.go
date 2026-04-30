@@ -38,12 +38,14 @@ type Channel struct {
 	client     *http.Client
 	pollClient *http.Client
 
-	transport     string // "polling" (default) | "webhook"
+	transport     string // "webhook" (default) | "polling"
+	webhookPath   string // slug suffix appended to /channels/zalo/webhook/
 	webhookSecret string // guards X-Bot-Api-Secret-Token in webhook mode
 	botID         string // from getMe; used to filter self-echoes
 	instanceID    uuid.UUID
 
 	webhookRouter *common.Router
+	resolvedSlug  string
 
 	stopOnce sync.Once
 
@@ -58,10 +60,14 @@ var _ channels.WebhookChannel = (*Channel)(nil)
 
 // WebhookHandler returns (path, handler) on the first caller across the
 // shared router; subsequent calls return ("", nil). Per-instance dispatch
-// is keyed off the ?instance=<uuid> query param.
+// uses the slug suffix of the path: /channels/zalo/webhook/<slug>.
 func (c *Channel) WebhookHandler() (string, http.Handler) {
 	return common.SharedRouter().MountRoute()
 }
+
+// ResolvedWebhookSlug returns the slug the channel registered with the shared
+// router (empty if not yet started or polling mode).
+func (c *Channel) ResolvedWebhookSlug() string { return c.resolvedSlug }
 
 // New creates a Zalo Bot channel.
 func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore) (*Channel, error) {
@@ -84,7 +90,7 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 
 	transport := cfg.Transport
 	if transport == "" {
-		transport = "polling"
+		transport = "webhook"
 	}
 
 	ch := &Channel{
@@ -97,6 +103,7 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 		client:        &http.Client{Timeout: 60 * time.Second},
 		pollClient:    &http.Client{Timeout: 0},
 		transport:     transport,
+		webhookPath:   cfg.WebhookPath,
 		webhookSecret: cfg.WebhookSecret,
 	}
 	ch.SetPairingService(pairingSvc)
@@ -126,9 +133,18 @@ func (c *Channel) Start(ctx context.Context) error {
 			c.SetRunning(false)
 			return fmt.Errorf("zalo_bot: transport=webhook requires webhook_secret")
 		}
-		c.webhookRouter.RegisterInstance(c.instanceID, c, c.TenantID())
+		slug := c.webhookPath
+		if slug == "" {
+			slug = common.DeriveSlugFromName(c.Name())
+		}
+		if err := c.webhookRouter.RegisterInstance(c.instanceID, c, c.TenantID(), slug); err != nil {
+			c.MarkFailed("webhook register failed", err.Error(), channels.ChannelFailureKindConfig, false)
+			c.SetRunning(false)
+			return nil
+		}
+		c.resolvedSlug = slug
 		slog.Info("zalo_bot.webhook.registered",
-			"instance_id", c.instanceID, "bot_id", c.botID)
+			"instance_id", c.instanceID, "bot_id", c.botID, "slug", slug)
 	case "polling":
 		go c.pollLoop(ctx)
 	default:

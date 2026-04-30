@@ -69,7 +69,7 @@ func TestZaloWebhookURL_OAInstance_ReturnsPathAndHint(t *testing.T) {
 	tenantID := uuid.New()
 	instID := uuid.New()
 	fs := &fakeWebhookInstStore{byID: map[uuid.UUID]*store.ChannelInstanceData{
-		instID: {BaseModel: store.BaseModel{ID: instID}, TenantID: tenantID, ChannelType: channels.TypeZaloOA},
+		instID: {BaseModel: store.BaseModel{ID: instID}, TenantID: tenantID, ChannelType: channels.TypeZaloOA, Name: "My OA"},
 	}}
 	m := NewZaloWebhookMethods(fs)
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tenantID, "u")
@@ -85,9 +85,12 @@ func TestZaloWebhookURL_OAInstance_ReturnsPathAndHint(t *testing.T) {
 	if payload == nil {
 		t.Fatalf("nil result payload; resp=%+v", resp)
 	}
-	wantPath := "/channels/zalo/webhook?instance=" + instID.String()
+	wantPath := "/channels/zalo/webhook/my-oa"
 	if got, _ := payload["path"].(string); got != wantPath {
 		t.Errorf("path = %q, want %q", got, wantPath)
+	}
+	if got, _ := payload["slug"].(string); got != "my-oa" {
+		t.Errorf("slug = %q, want my-oa", got)
 	}
 	if got, _ := payload["instance_id"].(string); got != instID.String() {
 		t.Errorf("instance_id = %q, want %q", got, instID.String())
@@ -97,12 +100,13 @@ func TestZaloWebhookURL_OAInstance_ReturnsPathAndHint(t *testing.T) {
 	}
 }
 
-func TestZaloWebhookURL_BotInstance_ReturnsPath(t *testing.T) {
+func TestZaloWebhookURL_RespectsExplicitWebhookPath(t *testing.T) {
 	t.Parallel()
 	tenantID := uuid.New()
 	instID := uuid.New()
+	cfg := json.RawMessage(`{"webhook_path":"custom-slug"}`)
 	fs := &fakeWebhookInstStore{byID: map[uuid.UUID]*store.ChannelInstanceData{
-		instID: {BaseModel: store.BaseModel{ID: instID}, TenantID: tenantID, ChannelType: channels.TypeZaloBot},
+		instID: {BaseModel: store.BaseModel{ID: instID}, TenantID: tenantID, ChannelType: channels.TypeZaloOA, Name: "Ignored Name", Config: cfg},
 	}}
 	m := NewZaloWebhookMethods(fs)
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tenantID, "u")
@@ -115,7 +119,30 @@ func TestZaloWebhookURL_BotInstance_ReturnsPath(t *testing.T) {
 		t.Fatalf("unexpected error: %+v", resp.Error)
 	}
 	payload, _ := resp.Payload.(map[string]any)
-	wantPath := "/channels/zalo/webhook?instance=" + instID.String()
+	if got, _ := payload["path"].(string); got != "/channels/zalo/webhook/custom-slug" {
+		t.Errorf("path = %q, want /channels/zalo/webhook/custom-slug", got)
+	}
+}
+
+func TestZaloWebhookURL_BotInstance_ReturnsPath(t *testing.T) {
+	t.Parallel()
+	tenantID := uuid.New()
+	instID := uuid.New()
+	fs := &fakeWebhookInstStore{byID: map[uuid.UUID]*store.ChannelInstanceData{
+		instID: {BaseModel: store.BaseModel{ID: instID}, TenantID: tenantID, ChannelType: channels.TypeZaloBot, Name: "support-bot"},
+	}}
+	m := NewZaloWebhookMethods(fs)
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tenantID, "u")
+
+	m.handleWebhookURL(context.Background(), client,
+		webhookReqFrame(t, map[string]any{"instance_id": instID.String()}))
+
+	resp := readResp(t, ch)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %+v", resp.Error)
+	}
+	payload, _ := resp.Payload.(map[string]any)
+	wantPath := "/channels/zalo/webhook/support-bot"
 	if got, _ := payload["path"].(string); got != wantPath {
 		t.Errorf("path = %q, want %q", got, wantPath)
 	}

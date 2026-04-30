@@ -18,8 +18,8 @@ func TestSharedRouter_Singleton(t *testing.T) {
 func TestMountRoute_FirstCallReturnsPath(t *testing.T) {
 	r := NewRouter()
 	path, h := r.MountRoute()
-	if path != WebhookPath || h != r {
-		t.Fatalf("first MountRoute = (%q, %v), want (%q, router)", path, h, WebhookPath)
+	if path != WebhookPathPrefix || h != r {
+		t.Fatalf("first MountRoute = (%q, %v), want (%q, router)", path, h, WebhookPathPrefix)
 	}
 }
 
@@ -63,7 +63,9 @@ func TestMountRoute_StickyAcrossUnregister(t *testing.T) {
 	instID := uuid.New()
 	handler := newFakeHandler()
 
-	r.RegisterInstance(instID, handler, uuid.Nil)
+	if err := r.RegisterInstance(instID, handler, uuid.Nil, "sticky"); err != nil {
+		t.Fatalf("RegisterInstance: %v", err)
+	}
 	_, _ = r.MountRoute()
 	r.UnregisterInstance(instID)
 

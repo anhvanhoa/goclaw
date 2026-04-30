@@ -17,12 +17,13 @@ type zaloCreds struct {
 }
 
 type zaloInstanceConfig struct {
-	DMPolicy   string   `json:"dm_policy,omitempty"`
-	Transport  string   `json:"transport,omitempty"`
-	WebhookURL string   `json:"webhook_url,omitempty"`
-	MediaMaxMB int      `json:"media_max_mb,omitempty"`
-	AllowFrom  []string `json:"allow_from,omitempty"`
-	BlockReply *bool    `json:"block_reply,omitempty"`
+	DMPolicy    string   `json:"dm_policy,omitempty"`
+	Transport   string   `json:"transport,omitempty"`
+	WebhookURL  string   `json:"webhook_url,omitempty"`
+	WebhookPath string   `json:"webhook_path,omitempty"`
+	MediaMaxMB  int      `json:"media_max_mb,omitempty"`
+	AllowFrom   []string `json:"allow_from,omitempty"`
+	BlockReply  *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a Zalo Bot channel from channel_instances data.
@@ -54,6 +55,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		DMPolicy:      ic.DMPolicy,
 		Transport:     ic.Transport,
 		WebhookURL:    ic.WebhookURL,
+		WebhookPath:   ic.WebhookPath,
 		WebhookSecret: c.WebhookSecret,
 		MediaMaxMB:    ic.MediaMaxMB,
 		BlockReply:    ic.BlockReply,

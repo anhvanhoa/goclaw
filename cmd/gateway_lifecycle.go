@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	zalocommon "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
@@ -207,9 +209,21 @@ func (d *gatewayDeps) runLifecycle(
 
 	// Mount channel webhook handlers on the main mux (e.g. Feishu /feishu/events).
 	// This allows webhook-based channels to share the main server port.
+	zaloPrefixMounted := false
 	for _, route := range d.channelMgr.WebhookHandlers() {
 		mux.Handle(route.Path, route.Handler)
 		slog.Info("webhook route mounted on gateway", "path", route.Path)
+		if route.Path == zalocommon.WebhookPathPrefix {
+			zaloPrefixMounted = true
+		}
+	}
+	// Suppress http.ServeMux 301 redirect from bare /channels/zalo/webhook to
+	// /channels/zalo/webhook/. Operators who paste the prefix without a slug
+	// get a clean 404 instead of leaking the prefix path.
+	if zaloPrefixMounted {
+		mux.HandleFunc(zalocommon.WebhookPathBare, func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "not found", http.StatusNotFound)
+		})
 	}
 
 	tsCleanup := initTailscale(ctx, d.cfg, mux)
