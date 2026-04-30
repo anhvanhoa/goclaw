@@ -173,9 +173,7 @@ func (c *Channel) Start(ctx context.Context) error {
 			"instance_id", c.instanceID, "bot_id", c.botID, "slug", slug)
 		c.MarkHealthy("webhook")
 	case "polling":
-		// Clear any prior webhook registration so getUpdates doesn't 400.
-		// Best-effort: log and continue if Zalo rejects (polling will surface
-		// the conflict on the first getUpdates call anyway).
+		// getUpdates 400s while a webhook URL is registered; clear it.
 		if err := c.deleteWebhook(); err != nil {
 			slog.Warn("zalo_bot.poll.delete_webhook_failed",
 				"instance_id", c.instanceID, "bot_id", c.botID, "err", err)

@@ -119,10 +119,8 @@ export function ChannelInstanceFormDialog({
     }
   }, [open, instance, agents, form]);
 
-  // Create mode: re-seed config defaults when the user switches channel type
-  // so dependent `showWhen` fields (e.g. zalo_bot.webhook_secret depends on
-  // transport=webhook) become visible. Edit mode locks channel_type so this
-  // is a no-op there.
+  // Re-seed config defaults on channel-type switch so dependent showWhen
+  // fields resolve. Edit mode locks channel_type; this is a no-op there.
   useEffect(() => {
     if (!open || instance) return;
     const schema = configSchema[channelType] ?? [];
@@ -174,7 +172,7 @@ export function ChannelInstanceFormDialog({
   const handleSubmit = form.handleSubmit(async (values) => {
     if (!instance) {
       const schema = credentialsSchema[values.channelType] ?? [];
-      // Cross-schema visibility: credential showWhen often depends on config keys (e.g. transport).
+      // Credential showWhen can depend on config keys (e.g. transport).
       const credsContext = { ...configValues, ...credsValues };
       const missing = schema.filter(
         (f: FieldDef) => f.required && isFieldVisible(f, schema, credsContext) && !credsValues[f.key],
@@ -190,7 +188,6 @@ export function ChannelInstanceFormDialog({
     );
     coerceBoolSelects(cleanConfig, configSchema[values.channelType] ?? []);
 
-    // Config required check (create-only): validate after cleanConfig is built so empty strings are caught.
     if (!instance) {
       const cfgSchema = configSchema[values.channelType] ?? [];
       const missingCfg = cfgSchema.filter(

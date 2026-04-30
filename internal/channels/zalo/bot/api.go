@@ -75,9 +75,6 @@ func (c *Channel) getMe() (*zaloBotInfo, error) {
 	return &info, nil
 }
 
-// deleteWebhook clears any webhook URL registered on Zalo for this bot.
-// getUpdates returns 400 while a webhook is set, so polling-mode channels
-// must clear it on Start to recover from a previous webhook configuration.
 func (c *Channel) deleteWebhook() error {
 	_, err := c.callAPI("deleteWebhook", nil)
 	return err

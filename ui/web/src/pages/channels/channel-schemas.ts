@@ -20,9 +20,6 @@ export interface FieldDef {
   generatable?: boolean;
 }
 
-// Resolves a field's `showWhen` against current values. Used by the renderer
-// to hide fields and by the form submit to skip required-field checks for
-// hidden fields (e.g. webhook_path is required but only when transport=webhook).
 export function isFieldVisible(
   field: FieldDef,
   schema: FieldDef[],
@@ -201,7 +198,7 @@ export const configSchema: Record<string, FieldDef[]> = {
   zalo_oa: [
     { key: "transport", label: "Ingestion Mode", type: "select", options: [{ value: "webhook", label: "Webhook (recommended)" }, { value: "polling", label: "Polling" }], defaultValue: "webhook", help: "Webhook is event-driven and lighter on the server. Polling fetches via listrecentchat on a timer." },
     { key: "webhook_path", label: "Webhook Path", type: "text", required: true, placeholder: "my-oa", showWhen: { key: "transport", value: "webhook" }, help: "URL: /channels/zalo/webhook/<slug>. Lowercase letters, numbers, hyphens. 2–63 chars." },
-    { key: "webhook_signature_mode", label: "Signature Mode", type: "select", options: [{ value: "strict", label: "Strict (recommended)" }, { value: "log_only", label: "Log only" }, { value: "disabled", label: "Disabled" }], defaultValue: "strict", showWhen: { key: "transport", value: "webhook" }, help: "Strict rejects bad signatures. Log-only is for migration. Disabled skips verification. Webhook Secret Key (under Credentials) required for strict/log_only." },
+    { key: "webhook_signature_mode", label: "Signature Mode", type: "select", options: [{ value: "disabled", label: "Disabled (default)" }, { value: "log_only", label: "Log only" }, { value: "strict", label: "Strict" }], defaultValue: "disabled", showWhen: { key: "transport", value: "webhook" }, help: "Disabled skips verification — easiest to bring up. Switch to Strict once Webhook Secret Key (under Credentials) is set; Log-only is the migration step in between." },
     { key: "webhook_replay_window_seconds", label: "Replay Window (seconds)", type: "number", defaultValue: 300, showWhen: { key: "transport", value: "webhook" }, help: "Max age of accepted webhook events. Default 300, range 60–3600." },
     { key: "catch_up_on_restart", label: "Catch Up On Restart", type: "boolean", defaultValue: false, showWhen: { key: "transport", value: "webhook" }, help: "Run one bounded listrecentchat sweep on Start to backfill events missed while offline." },
     { key: "poll_interval_seconds", label: "Poll Interval (seconds)", type: "number", defaultValue: 15, showWhen: { key: "transport", value: "polling" }, help: "How often to fetch new messages. Min 5, max 120." },
