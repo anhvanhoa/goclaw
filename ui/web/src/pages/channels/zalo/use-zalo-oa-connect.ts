@@ -24,9 +24,10 @@ export function extractCode(input: string, stashedState: string): { code: string
   }
   try {
     const u = new URL(trimmed);
-    const code = u.searchParams.get("code") ?? "";
-    const state = u.searchParams.get("state") ?? "";
-    const oaID = u.searchParams.get("oa_id") ?? "";
+    // URLSearchParams preserves verbatim whitespace; trim each value.
+    const code = (u.searchParams.get("code") ?? "").trim();
+    const state = (u.searchParams.get("state") ?? "").trim();
+    const oaID = (u.searchParams.get("oa_id") ?? "").trim();
     return {
       code,
       oaID,
