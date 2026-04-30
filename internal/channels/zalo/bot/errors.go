@@ -1,6 +1,9 @@
 package bot
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Zalo Bot API error codes (HTTP-status-shaped) returned in the response
 // envelope's `error_code` field. Source: docs/zalo-error-codes.md (bot-api
@@ -30,12 +33,25 @@ var botCodeHints = map[int]string{
 	codeBotQuotaExceeded:       "Zalo bot API rate limit exceeded; back off before retrying.",
 }
 
-// formatAPIError builds the user/agent-facing error string for a non-OK Zalo
-// bot API response. When the code is in the catalog the hint is appended so
-// the agent loop can self-correct without parsing the raw description.
-func formatAPIError(code int, description string) error {
-	if hint, ok := botCodeHints[code]; ok {
-		return fmt.Errorf("zalo API error %d: %s — %s", code, description, hint)
+// APIError carries the Zalo Bot envelope's error_code so callers can match
+// by errors.As instead of substring-grepping the formatted message.
+type APIError struct {
+	Code        int
+	Description string
+}
+
+func (e *APIError) Error() string {
+	if hint, ok := botCodeHints[e.Code]; ok {
+		return fmt.Sprintf("zalo API error %d: %s — %s", e.Code, e.Description, hint)
 	}
-	return fmt.Errorf("zalo API error %d: %s", code, description)
+	return fmt.Sprintf("zalo API error %d: %s", e.Code, e.Description)
+}
+
+func formatAPIError(code int, description string) error {
+	return &APIError{Code: code, Description: description}
+}
+
+func isAPIErrCode(err error, code int) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Code == code
 }

@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -33,8 +32,8 @@ func (c *Channel) pollLoop(ctx context.Context) {
 
 		updates, err := c.getUpdates(defaultPollTimeout)
 		if err != nil {
-			// 408 = no updates (timeout), not an error
-			if !strings.Contains(err.Error(), "408") {
+			// 408 = long-poll timeout (no updates); not a real error.
+			if !isAPIErrCode(err, codeBotRequestTimeout) {
 				slog.Warn("zalo getUpdates error", "error", err)
 				select {
 				case <-ctx.Done():
