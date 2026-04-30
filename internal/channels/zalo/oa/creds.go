@@ -32,8 +32,8 @@ type ChannelCreds struct {
 
 	AccessToken   string    `json:"access_token,omitempty"`
 	RefreshToken  string    `json:"refresh_token,omitempty"`
-	ExpiresAt     time.Time `json:"expires_at,omitempty"`
-	LastRefreshAt time.Time `json:"last_refresh_at,omitempty"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	LastRefreshAt time.Time `json:"last_refresh_at"`
 }
 
 // LoadCreds parses plaintext credentials JSON.

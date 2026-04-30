@@ -152,7 +152,7 @@ func (c *Channel) SendFile(ctx context.Context, userID string, data []byte, file
 // to Failed/Auth so the dashboard surfaces the reauth prompt promptly.
 func (c *Channel) post(ctx context.Context, path string, body any) (string, error) {
 	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		tok, err := c.tokens.Access(ctx)
 		if err != nil {
 			c.markAuthFailedIfNeeded(err)

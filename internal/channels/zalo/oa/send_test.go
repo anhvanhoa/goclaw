@@ -193,7 +193,7 @@ func TestSendText_ChunksLongMessages(t *testing.T) {
 	// Build a body well over the 2000-rune cap with paragraph breaks every
 	// ~500 runes so the chunker has natural cut points.
 	var bldr strings.Builder
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		bldr.WriteString(strings.Repeat("a", 499))
 		bldr.WriteString("\n\n")
 	}
@@ -695,4 +695,3 @@ func TestChannelSend_PartialSendOnTrailingTextFailure(t *testing.T) {
 		t.Errorf("err = %v, want ErrPartialSend", err)
 	}
 }
-

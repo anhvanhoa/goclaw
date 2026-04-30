@@ -24,16 +24,18 @@ func TestSend_WireShape_Fixtures(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		call            func(c *Channel) (string, error)
-		wantReqFixture  string
-		uploadFixture   string // empty for text-only
-		uploadPath      string // empty for text-only
-		wantMID         string
+		name           string
+		call           func(c *Channel) (string, error)
+		wantReqFixture string
+		uploadFixture  string // empty for text-only
+		uploadPath     string // empty for text-only
+		wantMID        string
 	}{
 		{
-			name:           "SendText",
-			call:           func(c *Channel) (string, error) { return c.SendText(context.Background(), "user-fixture", "hello fixture") },
+			name: "SendText",
+			call: func(c *Channel) (string, error) {
+				return c.SendText(context.Background(), "user-fixture", "hello fixture")
+			},
 			wantReqFixture: "testdata/send_text_request.json",
 			wantMID:        "msg-fixture-1",
 		},
@@ -72,7 +74,6 @@ func TestSend_WireShape_Fixtures(t *testing.T) {
 	sendReply := mustReadFixture(t, "testdata/send_message_200.json")
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -151,4 +152,3 @@ func canonicalize(t *testing.T, raw []byte) []byte {
 	}
 	return out
 }
-

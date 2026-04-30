@@ -19,14 +19,14 @@ func synthesizePNG(t *testing.T, w, h int, noisy bool) []byte {
 	if noisy {
 		// Deterministic seed so the test is reproducible.
 		r := rand.New(rand.NewPCG(42, 42))
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
+		for y := range h {
+			for x := range w {
 				img.Set(x, y, color.RGBA{uint8(r.UintN(256)), uint8(r.UintN(256)), uint8(r.UintN(256)), 255})
 			}
 		}
 	} else {
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
+		for y := range h {
+			for x := range w {
 				img.Set(x, y, color.RGBA{uint8(x), uint8(y), uint8((x + y) % 256), 255})
 			}
 		}

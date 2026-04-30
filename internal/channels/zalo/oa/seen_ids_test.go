@@ -51,7 +51,7 @@ func TestSeenMessageIDs_LRUEviction(t *testing.T) {
 
 func TestSeenMessageIDs_DefaultMax(t *testing.T) {
 	s := newSeenMessageIDs(0) // should clamp to default 256
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		s.SeenOrAdd(fmt.Sprintf("id-%d", i))
 	}
 	if s.order.Len() != 256 {
@@ -66,11 +66,11 @@ func TestSeenMessageIDs_DefaultMax(t *testing.T) {
 func TestSeenMessageIDs_ConcurrentSafe(t *testing.T) {
 	s := newSeenMessageIDs(1024)
 	var wg sync.WaitGroup
-	for g := 0; g < 16; g++ {
+	for g := range 16 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < 200; i++ {
+			for i := range 200 {
 				s.SeenOrAdd(fmt.Sprintf("g%d-i%d", g, i))
 			}
 		}(g)

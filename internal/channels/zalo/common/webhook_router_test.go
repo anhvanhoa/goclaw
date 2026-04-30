@@ -43,8 +43,10 @@ func (f *fakeHandler) HandleWebhookEvent(_ context.Context, raw json.RawMessage)
 	return f.handlerErr
 }
 
-func (f *fakeHandler) SignatureVerifier() SignatureVerifier   { return staticVerifier{err: f.verifyErr} }
-func (f *fakeHandler) MessageIDExtractor() MessageIDExtractor { return staticExtractor{id: f.extractedID} }
+func (f *fakeHandler) SignatureVerifier() SignatureVerifier { return staticVerifier{err: f.verifyErr} }
+func (f *fakeHandler) MessageIDExtractor() MessageIDExtractor {
+	return staticExtractor{id: f.extractedID}
+}
 
 type staticVerifier struct{ err error }
 
@@ -182,7 +184,7 @@ func TestRouter_PanicInHandlerRecovered(t *testing.T) {
 func TestRouter_RateLimitReturns429(t *testing.T) {
 	_, _, _, srv := newTestServer(t)
 	defer srv.Close()
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		_ = postSlug(srv, testSlug, `{}`)
 	}
 	resp := postSlug(srv, testSlug, `{}`)
@@ -317,7 +319,7 @@ func TestRouter_EmptyIDStreak_WarnsAtThreshold(t *testing.T) {
 	defer srv.Close()
 	h.extractedID = "" // every event yields no message_id
 
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		_ = postSlug(srv, testSlug, `{}`)
 		waitForDispatch(t, h)
 	}
@@ -350,7 +352,7 @@ func TestRouter_EmptyIDStreak_ResetsOnNonEmpty(t *testing.T) {
 	defer srv.Close()
 
 	h.extractedID = ""
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_ = postSlug(srv, testSlug, `{}`)
 		waitForDispatch(t, h)
 	}
@@ -359,7 +361,7 @@ func TestRouter_EmptyIDStreak_ResetsOnNonEmpty(t *testing.T) {
 	waitForDispatch(t, h)
 
 	h.extractedID = ""
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		_ = postSlug(srv, testSlug, `{}`)
 		waitForDispatch(t, h)
 	}

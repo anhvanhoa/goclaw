@@ -118,7 +118,7 @@ func TestVerifier_AcceptsValidSignature(t *testing.T) {
 func TestVerifier_RejectsMissingHeader(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "secret", "strict", time.Hour)
-	body := []byte(fmt.Sprintf(`{"timestamp":%d}`, nowMs()))
+	body := fmt.Appendf(nil, `{"timestamp":%d}`, nowMs())
 	if err := v.Verify(http.Header{}, body); err == nil || !strings.Contains(err.Error(), "missing X-ZEvent-Signature") {
 		t.Errorf("Verify(no header) err = %v, want missing-header", err)
 	}
@@ -127,7 +127,7 @@ func TestVerifier_RejectsMissingHeader(t *testing.T) {
 func TestVerifier_RejectsLengthMismatch(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "secret", "strict", time.Hour)
-	body := []byte(fmt.Sprintf(`{"timestamp":%d}`, nowMs()))
+	body := fmt.Appendf(nil, `{"timestamp":%d}`, nowMs())
 	hdr := http.Header{}
 	hdr.Set(zaloOASignatureHeader, "deadbeef") // shorter than 64-char hex
 	err := v.Verify(hdr, body)
@@ -139,7 +139,7 @@ func TestVerifier_RejectsLengthMismatch(t *testing.T) {
 func TestVerifier_RejectsWrongSignature(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "secret", "strict", time.Hour)
-	body := []byte(fmt.Sprintf(`{"timestamp":%d}`, nowMs()))
+	body := fmt.Appendf(nil, `{"timestamp":%d}`, nowMs())
 	wrong := strings.Repeat("a", 64) // valid hex length, wrong value
 	hdr := http.Header{}
 	hdr.Set(zaloOASignatureHeader, wrong)
@@ -152,7 +152,7 @@ func TestVerifier_RejectsWrongSignature(t *testing.T) {
 func TestVerifier_RejectsEmptySecretInStrict(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "", "strict", time.Hour)
-	body := []byte(fmt.Sprintf(`{"timestamp":%d}`, nowMs()))
+	body := fmt.Appendf(nil, `{"timestamp":%d}`, nowMs())
 	if err := v.Verify(http.Header{}, body); err == nil || !strings.Contains(err.Error(), "secret unset") {
 		t.Errorf("Verify err = %v, want secret-unset", err)
 	}
@@ -162,7 +162,7 @@ func TestVerifier_RejectsEmptySecretInStrict(t *testing.T) {
 func TestVerifier_LogOnlyAcceptsMismatch(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "secret", "log_only", time.Hour)
-	body := []byte(fmt.Sprintf(`{"timestamp":%d}`, nowMs()))
+	body := fmt.Appendf(nil, `{"timestamp":%d}`, nowMs())
 	hdr := http.Header{}
 	hdr.Set(zaloOASignatureHeader, strings.Repeat("a", 64))
 	if err := v.Verify(hdr, body); err != nil {
@@ -208,7 +208,7 @@ func TestVerifier_TimestampCanonicalizedViaInt64(t *testing.T) {
 	t.Parallel()
 	v := newOASignatureVerifier("app-1", "secret", "strict", time.Hour)
 	tsInt := nowMs()
-	body := []byte(fmt.Sprintf(`{"timestamp":%d,"event_name":"x"}`, tsInt))
+	body := fmt.Appendf(nil, `{"timestamp":%d,"event_name":"x"}`, tsInt)
 	tsStr := fmt.Sprintf("%d", tsInt)
 	sig := computeOASignature("app-1", string(body), tsStr, "secret")
 	hdr := http.Header{}

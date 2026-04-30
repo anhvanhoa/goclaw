@@ -64,7 +64,7 @@ func (c *Channel) pollOnce(ctx context.Context) error {
 	pageSize := pollCountFromCfg(c.cfg.PollCount)
 	maxPages := pollBurndownMaxPagesFromCfg(c.cfg.PollBurndownMaxPages)
 
-	for page := 0; page < maxPages; page++ {
+	for page := range maxPages {
 		if err := ctx.Err(); err != nil {
 			return err
 		}

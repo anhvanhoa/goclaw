@@ -168,7 +168,7 @@ func drainInbound(t *testing.T, msgBus *bus.MessageBus, max int) []string {
 func genFullPage(prefix string, startTime int64, n int) string {
 	var sb strings.Builder
 	sb.WriteString(`{"error":0,"data":[`)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			sb.WriteString(",")
 		}
@@ -190,7 +190,7 @@ func genFullPage(prefix string, startTime int64, n int) string {
 	return sb.String()
 }
 
-func intStr(n int) string    { return int64Str(int64(n)) }
+func intStr(n int) string { return int64Str(int64(n)) }
 func int64Str(n int64) string {
 	if n == 0 {
 		return "0"
@@ -365,7 +365,7 @@ func TestPollOnce_BurnDown_NoDoubleDispatchAcrossPages(t *testing.T) {
 func genSingleUserPage(prefix, userID string, startTime int64, n int) string {
 	var sb strings.Builder
 	sb.WriteString(`{"error":0,"data":[`)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			sb.WriteString(",")
 		}

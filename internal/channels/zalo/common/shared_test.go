@@ -37,17 +37,15 @@ func TestMountRoute_ConcurrentSafety(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	pathClaims := 0
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			path, _ := r.MountRoute()
 			if path != "" {
 				mu.Lock()
 				pathClaims++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if pathClaims != 1 {
