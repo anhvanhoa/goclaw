@@ -52,8 +52,6 @@ type Channel struct {
 
 	stopOnce sync.Once
 
-	// legacyPhotoSentinelWarn fires once if a caller still emits the
-	// deprecated [photo:URL] sentinel after the Media[] migration.
 	legacyPhotoSentinelWarn sync.Once
 }
 
