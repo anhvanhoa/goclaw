@@ -244,6 +244,10 @@
     "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
     "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" },
     "reaction_level": { "label": "Mức độ reaction" },
+    "quote_user_message": {
+      "label": "Trích dẫn tin của người dùng",
+      "help": "Trả lời kèm trích dẫn tin nhắn gần nhất của người dùng (reply-to của Zalo). Tắt để gửi trả lời thường, không kèm trích dẫn."
+    },
     "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },

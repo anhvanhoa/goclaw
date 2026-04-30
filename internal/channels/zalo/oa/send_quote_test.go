@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 func TestBuildTextBody_NoQuote(t *testing.T) {
@@ -305,5 +306,29 @@ func TestSendText_AuthRetryThenPayloadFallback(t *testing.T) {
 	}
 	if got := extractQuoteID(t, (*captured)[2].body); got != "" {
 		t.Errorf("call 3 quote = %q, want empty (payload fallback drops it)", got)
+	}
+}
+
+func TestQuoteInboundOnDM_HonorsConfig(t *testing.T) {
+	t.Parallel()
+	off := false
+	on := true
+	cases := []struct {
+		name string
+		ptr  *bool
+		want bool
+	}{
+		{"unset_defaults_on", nil, true},
+		{"explicit_true", &on, true},
+		{"explicit_false", &off, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := &Channel{cfg: config.ZaloOAConfig{QuoteUserMessage: tc.ptr}}
+			if got := c.QuoteInboundOnDM(); got != tc.want {
+				t.Errorf("QuoteInboundOnDM = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

@@ -281,6 +281,10 @@
       "help": "Display AI thinking as a separate message before the answer (requires streaming)"
     },
     "reaction_level": { "label": "Reaction Level" },
+    "quote_user_message": {
+      "label": "Quote user message",
+      "help": "Reply by quoting the user's last inbound message (Zalo's reply-to). Turn off for plain replies without quote."
+    },
     "media_max_mb": { "label": "Max Media Size (MB)" },
     "link_preview": { "label": "Link Preview" },
     "allow_from": { "label": "Allowed Users" },

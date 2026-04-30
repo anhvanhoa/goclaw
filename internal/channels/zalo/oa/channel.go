@@ -135,9 +135,15 @@ func (c *Channel) ForceRefreshForTest() {
 
 func (c *Channel) Type() string { return channels.TypeZaloOA }
 
-// QuoteInboundOnDM enables outbound message.quote_message_id wiring for
-// Zalo OA — every CS reply quotes the user's last inbound message.
-func (c *Channel) QuoteInboundOnDM() bool { return true }
+// QuoteInboundOnDM gates auto-stamping of metadata["reply_to_message_id"]
+// upstream. Default on. Explicit metadata from callers (e.g. agent tools)
+// is still honored in Send regardless.
+func (c *Channel) QuoteInboundOnDM() bool {
+	if c.cfg.QuoteUserMessage == nil {
+		return true
+	}
+	return *c.cfg.QuoteUserMessage
+}
 
 var _ channels.WebhookChannel = (*Channel)(nil)
 var _ channels.DMQuoteChannel = (*Channel)(nil)

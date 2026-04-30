@@ -244,6 +244,10 @@
     "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
     "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" },
     "reaction_level": { "label": "表情回应级别" },
+    "quote_user_message": {
+      "label": "引用用户消息",
+      "help": "回复时引用用户的最近一条入站消息（Zalo 的 reply-to）。关闭后仅发送普通回复，不带引用。"
+    },
     "media_max_mb": { "label": "最大媒体大小 (MB)" },
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
