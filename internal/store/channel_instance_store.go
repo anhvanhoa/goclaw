@@ -54,6 +54,10 @@ type ChannelInstanceStore interface {
 	// not present in `partial` are preserved. Used by background workers
 	// (e.g. polling cursors) to avoid clobbering operator-set fields when
 	// they only own a single config sub-key.
+	//
+	// Nil values in `partial` are stripped before merge so PG (`||`,
+	// preserves nulls) and SQLite (`json_patch`, deletes null keys) agree —
+	// callers wanting to delete a key must do it explicitly via Update.
 	MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListEnabled(ctx context.Context) ([]ChannelInstanceData, error)

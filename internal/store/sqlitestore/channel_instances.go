@@ -236,10 +236,11 @@ func (s *SQLiteChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, u
 // Caveat: json_patch removes keys whose value is null in the patch. The
 // only consumer (poll cursor) writes int64 values, so this is fine.
 func (s *SQLiteChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
-	if len(partial) == 0 {
+	clean := stripNilValues(partial)
+	if len(clean) == 0 {
 		return nil
 	}
-	patch, err := json.Marshal(partial)
+	patch, err := json.Marshal(clean)
 	if err != nil {
 		return fmt.Errorf("marshal config patch: %w", err)
 	}
@@ -263,6 +264,18 @@ func (s *SQLiteChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UU
 		 WHERE id = ? AND tenant_id = ?`,
 		string(patch), time.Now(), id, tid)
 	return err
+}
+
+// stripNilValues — see ChannelInstanceStore.MergeConfig contract.
+func stripNilValues(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (s *SQLiteChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {

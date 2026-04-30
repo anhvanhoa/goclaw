@@ -235,10 +235,11 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 // read-modify-write race that the application-layer Update path has
 // when two writers touch the same blob concurrently.
 func (s *PGChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
-	if len(partial) == 0 {
+	clean := stripNilValues(partial)
+	if len(clean) == 0 {
 		return nil
 	}
-	patch, err := json.Marshal(partial)
+	patch, err := json.Marshal(clean)
 	if err != nil {
 		return fmt.Errorf("marshal config patch: %w", err)
 	}
@@ -262,6 +263,18 @@ func (s *PGChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, 
 		 WHERE id = $3 AND tenant_id = $4`,
 		patch, time.Now(), id, tid)
 	return err
+}
+
+// stripNilValues — see ChannelInstanceStore.MergeConfig contract.
+func stripNilValues(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // loadExistingCreds reads and decrypts the current credentials for merging.
