@@ -150,8 +150,8 @@ type BlockReplyChannel interface {
 // consumer to stamp reply_to_message_id on DM outbound metadata (the
 // standard group-only behavior is bypassed). The channel's Send path is
 // responsible for translating the metadata into the platform-specific quote
-// payload. Implementations must be O(1) — Manager holds an RLock while
-// calling QuoteInboundOnDM.
+// payload. Manager.QuoteInboundOnDM releases its RLock before invoking, so
+// implementations need not be lock-free, but should still be cheap.
 type DMQuoteChannel interface {
 	QuoteInboundOnDM() bool
 }

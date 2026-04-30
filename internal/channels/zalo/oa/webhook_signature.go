@@ -84,6 +84,7 @@ func (v *oaSignatureVerifier) Verify(headers http.Header, body []byte) error {
 	tsInt, err := extractTimestamp(body)
 	if err != nil {
 		if v.mode == SignatureModeLogOnly {
+			// log_only accepts: signature can't be recomputed without a parseable timestamp.
 			slog.Warn("security.zalo_oa_webhook_bad_timestamp_log_only", "err", err)
 			return nil
 		}

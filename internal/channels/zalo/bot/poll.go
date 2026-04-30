@@ -54,6 +54,13 @@ func (c *Channel) pollLoop(ctx context.Context) {
 }
 
 func (c *Channel) processUpdate(update zaloUpdate) {
+	// Zalo redelivers our own sends on both webhook and long-poll surfaces.
+	if update.Message != nil && update.Message.From.ID != "" && update.Message.From.ID == c.botID {
+		slog.Debug("zalo_bot.self_echo_filtered",
+			"bot_id", c.botID, "message_id", update.Message.MessageID)
+		return
+	}
+
 	switch update.EventName {
 	case "message.text.received":
 		if update.Message != nil {

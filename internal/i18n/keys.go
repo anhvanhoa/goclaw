@@ -255,4 +255,7 @@ const (
 	MsgZaloOAErrServer            = "error.zalo_oa_err_server"             // upstream temporary failure
 	MsgZaloOAErrRedirectURI       = "error.zalo_oa_err_redirect_uri"       // OAuth redirect_uri mismatch
 	MsgZaloOAReauthDueSoon        = "info.zalo_oa_reauth_due_soon"         // refresh token nearing expiry; re-consent ahead of downtime. Args: days
+
+	// User-facing fallback when an unsupported attachment is dropped. Args: filename, mime
+	MsgZaloOAUnsupportedAttachment = "info.zalo_oa_unsupported_attachment"
 )

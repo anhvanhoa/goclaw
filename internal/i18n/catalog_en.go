@@ -250,6 +250,7 @@ func init() {
 		MsgZaloOAErrServer:            "Zalo returned a temporary server error (code %d: %s); retry later",
 		MsgZaloOAErrRedirectURI:       "Zalo rejected the OAuth redirect_uri (code %d: %s); update the redirect URI in the Zalo console to match the channel config",
 		MsgZaloOAReauthDueSoon:        "Refresh token expires in %d day(s); re-authorize the OA to avoid downtime",
+		MsgZaloOAUnsupportedAttachment: "(File %q (%s) cannot be delivered via Zalo OA — only PDF/DOC/DOCX are accepted. Content described above.)",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",

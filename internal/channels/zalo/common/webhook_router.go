@@ -277,6 +277,12 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	resolvedID, resolvedInst, ok := r.reserveDispatchSlot(suffix)
 	if !ok || resolvedID != instanceID || resolvedInst != inst {
+		// Reload swapped the registration between Verify and reserveDispatchSlot.
+		slog.Debug("zalo_webhook.reload_race_dropped",
+			"slug", suffix,
+			"verified_instance_id", instanceID,
+			"resolved_instance_id", resolvedID,
+			"resolved_ok", ok)
 		w.WriteHeader(http.StatusOK)
 		return
 	}

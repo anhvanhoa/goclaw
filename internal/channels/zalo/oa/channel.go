@@ -79,8 +79,6 @@ func (c *Channel) inBootstrap() bool {
 		normalizeMode(c.cfg.WebhookSignatureMode) != SignatureModeDisabled
 }
 
-func (c *Channel) BootstrapDroppedForTest() int64 { return c.bootstrapDroppedCount.Load() }
-
 // New constructs the channel. InstanceLoader calls SetInstanceID after.
 func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 	ciStore store.ChannelInstanceStore, msgBus *bus.MessageBus, _ store.PairingStore) (*Channel, error) {
@@ -287,7 +285,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			slog.Warn("zalo_oa.send.unsupported_attachment_dropped",
 				"oa_id", c.creds.OAID, "mime", mt, "filename", filepath.Base(m.URL))
 			fallback := mergeTrailingText(m.Caption, msg.Content)
-			heads := fmt.Sprintf("(File %q (%s) cannot be delivered via Zalo OA — only PDF/DOC/DOCX are accepted. Content described above.)",
+			heads := i18n.T(store.LocaleFromContext(ctx), i18n.MsgZaloOAUnsupportedAttachment,
 				filepath.Base(m.URL), mt)
 			if fallback == "" {
 				fallback = heads

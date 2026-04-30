@@ -63,8 +63,6 @@ func (c *Channel) inBootstrap() bool {
 	return c.transport == "webhook" && c.webhookSecret == ""
 }
 
-func (c *Channel) BootstrapDroppedForTest() int64 { return c.bootstrapDroppedCount.Load() }
-
 var _ channels.WebhookChannel = (*Channel)(nil)
 
 // WebhookHandler returns (path, handler) on the first caller across the

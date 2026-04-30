@@ -17,10 +17,16 @@ import (
 func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) error {
 	if c.inBootstrap() {
 		n := c.bootstrapDroppedCount.Add(1)
-		slog.Warn("zalo_bot.webhook.bootstrap_drop",
-			"instance_id", c.instanceID,
-			"drop_count", n,
-			"hint", "paste Webhook Secret in Credentials tab to enable processing")
+		// Cap warn-level at first hit so a guessed slug can't amplify logs.
+		if n == 1 {
+			slog.Warn("zalo_bot.webhook.bootstrap_drop",
+				"instance_id", c.instanceID,
+				"drop_count", n,
+				"hint", "paste Webhook Secret in Credentials tab to enable processing")
+		} else {
+			slog.Debug("zalo_bot.webhook.bootstrap_drop",
+				"instance_id", c.instanceID, "drop_count", n)
+		}
 		return nil
 	}
 
@@ -29,13 +35,7 @@ func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) err
 		return fmt.Errorf("zalo_bot.webhook: decode update: %w", err)
 	}
 
-	// Drop self-echoes; Zalo redelivers our own sends to the webhook URL.
-	if u.Message != nil && u.Message.From.ID != "" && u.Message.From.ID == c.botID {
-		slog.Debug("zalo_bot.webhook.self_echo_filtered",
-			"bot_id", c.botID, "message_id", u.Message.MessageID)
-		return nil
-	}
-
+	// Self-echo filter lives in processUpdate so polling and webhook share it.
 	c.processUpdate(u)
 	return nil
 }

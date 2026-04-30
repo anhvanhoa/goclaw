@@ -45,10 +45,16 @@ func (e *oaInboundEvent) messageID() string {
 func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) error {
 	if c.inBootstrap() {
 		n := c.bootstrapDroppedCount.Add(1)
-		slog.Warn("zalo_oa.webhook.bootstrap_drop",
-			"instance_id", c.instanceID,
-			"drop_count", n,
-			"hint", "paste OA Secret Key in Credentials tab to enable processing")
+		// Cap warn-level at first hit so a guessed slug can't amplify logs.
+		if n == 1 {
+			slog.Warn("zalo_oa.webhook.bootstrap_drop",
+				"instance_id", c.instanceID,
+				"drop_count", n,
+				"hint", "paste OA Secret Key in Credentials tab to enable processing")
+		} else {
+			slog.Debug("zalo_oa.webhook.bootstrap_drop",
+				"instance_id", c.instanceID, "drop_count", n)
+		}
 		return nil
 	}
 	var e oaInboundEvent

@@ -7,7 +7,12 @@ import (
 	"time"
 )
 
-const reactionDebounceMs = 700 * time.Millisecond
+const (
+	reactionDebounceMs = 700 * time.Millisecond
+	// Late stale events within this window hit the terminal rc and short-circuit
+	// instead of LoadOrStore-ing a fresh controller that would stomp the heart.
+	reactionTombstoneTTL = 60 * time.Second
+)
 
 // Tone tuned for OA's B2C surface: one "received, working" ack on the
 // first intermediate event plus a warm/sad terminal. tool/coding/web are
@@ -145,7 +150,9 @@ func (c *Channel) OnReactionEvent(ctx context.Context, chatID, messageID, status
 	rc.SetStatus(ctx, status)
 
 	if status == "done" || status == "error" {
-		c.reactions.Delete(key)
+		time.AfterFunc(reactionTombstoneTTL, func() {
+			c.reactions.CompareAndDelete(key, rc)
+		})
 	}
 	return nil
 }

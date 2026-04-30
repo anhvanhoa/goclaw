@@ -94,7 +94,6 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
-    "lastChecked": "Last checked: {{value}}",
     "checkedRelative": "Checked {{value}}",
     "advanced": "Advanced",
     "advancedTitle": "Advanced Settings",

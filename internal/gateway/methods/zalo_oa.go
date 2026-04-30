@@ -172,10 +172,8 @@ func (m *ZaloOAMethods) handleExchangeCode(ctx context.Context, client *gateway.
 		return
 	}
 	creds.WithTokens(tok)
-	// Zalo's OAuth token endpoint does NOT return oa_id; it rides in the
-	// callback URL query string alongside `code`. Persist it here so the
-	// reloaded Channel's Start() sees a non-empty OAID and marks Healthy
-	// (otherwise it stays Degraded "awaiting consent" forever).
+	// OAID rides the callback URL (token endpoint omits it). Operator-pasted,
+	// tenant-scoped — mis-paste only mis-tags the operator's own instance.
 	if params.OAID != "" {
 		creds.OAID = params.OAID
 	}

@@ -60,12 +60,15 @@ func (d *Dedup) SeenOrAdd(instanceID uuid.UUID, messageID string) bool {
 		return true
 	}
 
-	d.evictExpired(now)
-	if d.perInst[instanceID] >= d.maxPerInstance {
-		d.evictOldestForInstance(instanceID)
-	}
-	if len(d.entries) >= d.maxGlobal {
-		d.evictOldestGlobal()
+	// Sweep only at-cap; TTL check above prevents stale false-positives meanwhile.
+	if len(d.entries) >= d.maxGlobal || d.perInst[instanceID] >= d.maxPerInstance {
+		d.evictExpired(now)
+		if d.perInst[instanceID] >= d.maxPerInstance {
+			d.evictOldestForInstance(instanceID)
+		}
+		if len(d.entries) >= d.maxGlobal {
+			d.evictOldestGlobal()
+		}
 	}
 
 	if _, exists := d.entries[key]; !exists {
