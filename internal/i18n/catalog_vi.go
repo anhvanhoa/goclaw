@@ -230,6 +230,8 @@ func init() {
 		MsgZaloOAConnected:           "đã kết nối tài khoản Zalo OA: %s",
 		MsgZaloOAInvalidState:        "mã state OAuth không hợp lệ hoặc đã hết hạn",
 		MsgZaloOARedirectURIRequired: "credentials.redirect_uri là bắt buộc và phải khớp chính xác với callback đã đăng ký trong Zalo developer console",
+		MsgZaloOAMissingAppID:        "credentials.app_id là bắt buộc — hãy nhập app_id cho kênh trước khi yêu cầu URL cấp quyền",
+		MsgZaloOAStateGenFailed:      "không thể sinh mã state cấp quyền; vui lòng thử lại",
 
 		// RPC URL webhook Zalo
 		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url chỉ áp dụng cho instance zalo_bot hoặc zalo_oa",

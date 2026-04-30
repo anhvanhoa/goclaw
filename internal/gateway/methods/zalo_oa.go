@@ -92,7 +92,7 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 
 	creds, err := zalooa.LoadCreds(inst.Credentials)
 	if err != nil || creds.AppID == "" {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "zalo_oa: missing app_id in credentials"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgZaloOAMissingAppID)))
 		return
 	}
 	if creds.RedirectURI == "" {
@@ -105,7 +105,7 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 
 	state, err := newStateToken()
 	if err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "zalo_oa: state token gen failed"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgZaloOAStateGenFailed)))
 		return
 	}
 	m.putState(instID, state)

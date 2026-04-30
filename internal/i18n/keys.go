@@ -235,6 +235,8 @@ const (
 	MsgZaloOAConnected           = "info.zalo_oa_connected"              // "zalo official account connected: %s"
 	MsgZaloOAInvalidState        = "error.zalo_oa_invalid_state"         // "oauth state token is invalid or expired"
 	MsgZaloOARedirectURIRequired = "error.zalo_oa_redirect_uri_required" // "credentials.redirect_uri is required and must match the dev-console callback"
+	MsgZaloOAMissingAppID        = "error.zalo_oa_missing_app_id"        // "credentials.app_id is required (set it on the channel before requesting consent URL)"
+	MsgZaloOAStateGenFailed      = "error.zalo_oa_state_gen_failed"      // "failed to generate state token"
 
 	// --- Zalo webhook URL RPC ---
 	MsgZaloWebhookWrongChannelType = "error.zalo_webhook_wrong_channel_type" // "channels.instances.zalo.webhook_url only applies to zalo_bot or zalo_oa"

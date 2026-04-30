@@ -230,6 +230,8 @@ func init() {
 		MsgZaloOAConnected:           "zalo official account connected: %s",
 		MsgZaloOAInvalidState:        "oauth state token is invalid or expired",
 		MsgZaloOARedirectURIRequired: "credentials.redirect_uri is required and must exactly match the callback registered in your Zalo developer console",
+		MsgZaloOAMissingAppID:        "credentials.app_id is required — set it on the channel before requesting the consent URL",
+		MsgZaloOAStateGenFailed:      "failed to generate consent state token; please retry",
 
 		// Zalo webhook URL RPC
 		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url only applies to zalo_bot or zalo_oa instances",
