@@ -19,15 +19,18 @@ var ErrAuthExpired = errors.New("zalo_oa: refresh token expired, re-auth require
 // flow. Health stays Degraded (not Failed).
 var ErrNotAuthorized = errors.New("zalo_oa: not yet authorized (paste consent code first)")
 
-// classifyRefreshError escalates to ErrAuthExpired only on "invalid_grant"
-// or "expired" — generic config errors stay transient so a bad config push
-// doesn't permanently sideline the channel.
+// classifyRefreshError escalates to ErrAuthExpired on Zalo's invalid_grant
+// envelope (-118, language-independent) or substring fallback for non-API
+// errors. Generic config errors stay transient.
 func classifyRefreshError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
+		if apiErr.Code == codeInvalidGrant {
+			return fmt.Errorf("%w (zalo error %d: %s)", ErrAuthExpired, apiErr.Code, apiErr.Message)
+		}
 		msg := strings.ToLower(apiErr.Message)
 		if strings.Contains(msg, "invalid_grant") || strings.Contains(msg, "expired") {
 			return fmt.Errorf("%w (zalo error %d: %s)", ErrAuthExpired, apiErr.Code, apiErr.Message)
