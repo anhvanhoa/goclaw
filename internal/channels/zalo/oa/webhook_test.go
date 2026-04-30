@@ -77,11 +77,11 @@ func TestComputeOASignature_FixedFixture(t *testing.T) {
 func TestNormalizeMode(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"":         "strict",
+		"":         "disabled",
 		"strict":   "strict",
 		"log_only": "log_only",
 		"disabled": "disabled",
-		"weird":    "strict",
+		"weird":    "disabled",
 	}
 	for in, want := range cases {
 		if got := normalizeMode(in); got != want {
@@ -271,10 +271,9 @@ func TestHandleWebhookEvent_FiltersSelfEcho(t *testing.T) {
 }
 
 // stubDownloader writes a fixture file and bypasses SSRF for hermetic tests.
-func stubDownloader(t *testing.T, ext string, body []byte) {
+func stubDownloader(t *testing.T, c *Channel, ext string, body []byte) {
 	t.Helper()
-	prev := downloadOAMediaFn
-	downloadOAMediaFn = func(_ context.Context, _ string) (string, error) {
+	c.downloadMediaFn = func(_ context.Context, _ string) (string, error) {
 		f, err := os.CreateTemp(t.TempDir(), "oa_test_*"+ext)
 		if err != nil {
 			return "", err
@@ -285,12 +284,11 @@ func stubDownloader(t *testing.T, ext string, body []byte) {
 		}
 		return f.Name(), nil
 	}
-	t.Cleanup(func() { downloadOAMediaFn = prev })
 }
 
 func TestHandleWebhookEvent_DispatchesImage(t *testing.T) {
-	stubDownloader(t, ".jpg", []byte("\xff\xd8\xff\xe0fake-jpeg"))
 	ch, mb := newWebhookChannel(t, "secret", "strict", 0)
+	stubDownloader(t, ch, ".jpg", []byte("\xff\xd8\xff\xe0fake-jpeg"))
 	payload := `{"event_name":"user_send_image","sender":{"id":"alice"},"message":{"message_id":"m_img","attachments":[{"type":"image","payload":{"url":"https://cdn.zalo.example/photo.jpg"}}]}}`
 	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
 		t.Fatalf("HandleWebhookEvent: %v", err)
@@ -310,8 +308,8 @@ func TestHandleWebhookEvent_DispatchesImage(t *testing.T) {
 }
 
 func TestHandleWebhookEvent_DispatchesFile(t *testing.T) {
-	stubDownloader(t, ".xlsx", []byte("PK\x03\x04xlsx-bytes"))
 	ch, mb := newWebhookChannel(t, "secret", "strict", 0)
+	stubDownloader(t, ch, ".xlsx", []byte("PK\x03\x04xlsx-bytes"))
 	payload := `{"event_name":"user_send_file","sender":{"id":"alice"},"message":{"message_id":"m_file","text":"please summarize","attachments":[{"type":"file","payload":{"url":"https://cdn.zalo.example/report.xlsx","name":"report.xlsx"}}]}}`
 	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
 		t.Fatalf("HandleWebhookEvent: %v", err)

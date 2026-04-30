@@ -63,7 +63,11 @@ func (c *Channel) dispatchWebhookMedia(parent context.Context, e *oaInboundEvent
 
 	ctx, cancel := context.WithTimeout(parent, 60*time.Second)
 	defer cancel()
-	path, err := downloadOAMediaFn(ctx, url)
+	dl := c.downloadMediaFn
+	if dl == nil {
+		dl = downloadOAMedia
+	}
+	path, err := dl(ctx, url)
 	if err != nil {
 		slog.Warn("zalo_oa.webhook.attachment_download_failed",
 			"event", e.EventName, "message_id", e.messageID(), "url", url, "error", err)
@@ -147,10 +151,6 @@ func (c *Channel) dispatchWebhookLink(e *oaInboundEvent) {
 }
 
 const oaWebhookMaxMediaBytes = 20 * 1024 * 1024
-
-// downloadOAMediaFn is package-level so tests can swap in a fixture writer
-// that bypasses the SSRF check on httptest loopback URLs.
-var downloadOAMediaFn = downloadOAMedia
 
 func downloadOAMedia(ctx context.Context, fileURL string) (string, error) {
 	if err := tools.CheckSSRF(fileURL); err != nil {

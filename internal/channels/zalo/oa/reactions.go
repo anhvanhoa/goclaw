@@ -144,10 +144,7 @@ func (c *Channel) OnReactionEvent(ctx context.Context, chatID, messageID, status
 	}
 
 	key := chatID + ":" + messageID
-	val, ok := c.reactions.Load(key)
-	if !ok {
-		val, _ = c.reactions.LoadOrStore(key, newZaloReactionController(c, chatID, messageID))
-	}
+	val, _ := c.reactions.LoadOrStore(key, newZaloReactionController(c, chatID, messageID))
 	rc, ok := val.(*zaloReactionController)
 	if !ok {
 		return nil
@@ -155,9 +152,17 @@ func (c *Channel) OnReactionEvent(ctx context.Context, chatID, messageID, status
 	rc.SetStatus(ctx, status)
 
 	if status == "done" || status == "error" {
-		time.AfterFunc(reactionTombstoneTTL, func() {
-			c.reactions.CompareAndDelete(key, rc)
-		})
+		c.reactionWG.Add(1)
+		go func() {
+			defer c.reactionWG.Done()
+			t := time.NewTimer(reactionTombstoneTTL)
+			defer t.Stop()
+			select {
+			case <-t.C:
+				c.reactions.CompareAndDelete(key, rc)
+			case <-c.stopCh:
+			}
+		}()
 	}
 	return nil
 }

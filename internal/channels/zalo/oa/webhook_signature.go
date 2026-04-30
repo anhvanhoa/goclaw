@@ -27,7 +27,10 @@ const (
 	tsMillisecondsThreshold = int64(1e12) // ~year 2001 in ms; below = seconds
 )
 
-// SignatureMode controls verifier behavior; empty/unknown → strict.
+// SignatureMode controls verifier behavior; empty/unknown → disabled.
+// Defaulting to disabled keeps onboarding frictionless — operators can
+// opt into strict (or log_only during migration) once they've pasted
+// the OA Secret Key into Credentials.
 type SignatureMode = string
 
 const (
@@ -41,7 +44,7 @@ func normalizeMode(m string) string {
 	case SignatureModeStrict, SignatureModeLogOnly, SignatureModeDisabled:
 		return m
 	default:
-		return SignatureModeStrict
+		return SignatureModeDisabled
 	}
 }
 

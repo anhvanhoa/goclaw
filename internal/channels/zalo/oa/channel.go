@@ -71,6 +71,10 @@ type Channel struct {
 	reactionWG      sync.WaitGroup
 	reactionCtx     context.Context
 	reactionCancel  context.CancelFunc
+
+	// downloadMediaFn lets tests inject a fixture writer that bypasses SSRF
+	// on httptest loopback URLs. nil → downloadOAMedia.
+	downloadMediaFn func(ctx context.Context, fileURL string) (string, error)
 }
 
 // creds returns a read-only snapshot. Refresh swaps the pointer atomically;
@@ -96,6 +100,10 @@ func New(name string, cfg config.ZaloOAConfig, creds *ChannelCreds,
 	}
 	if creds.AppID == "" || creds.SecretKey == "" {
 		return nil, errors.New("zalo_oa: app_id and secret_key are required")
+	}
+
+	if cfg.Transport == "" {
+		cfg.Transport = "webhook"
 	}
 
 	c := &Channel{
@@ -184,11 +192,6 @@ func (c *Channel) Start(_ context.Context) error {
 	c.tickerWG.Add(1)
 	go c.runSafetyTicker()
 
-	// Normalize on cfg so Stop's transport check matches Start's effective
-	// value — otherwise default-init channels leak the router registration.
-	if c.cfg.Transport == "" {
-		c.cfg.Transport = "webhook"
-	}
 	transport := c.cfg.Transport
 	switch transport {
 	case "webhook":
