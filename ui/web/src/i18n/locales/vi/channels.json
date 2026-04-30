@@ -475,6 +475,7 @@
     "pasteHelp": "Sau khi đồng ý, sao chép toàn bộ URL từ thanh địa chỉ trình duyệt và dán vào đây.",
     "pastePlaceholder": "URL callback đầy đủ",
     "exchangeFailed": "Đổi mã thất bại",
+    "errCodeMissing": "URL đã dán không có tham số \"code\" — hãy sao chép toàn bộ URL callback từ thanh địa chỉ trình duyệt sau khi cấp quyền.",
     "connectedClosing": "Đã kết nối — đang đóng…",
     "copyUrl": "Sao chép URL",
     "openInTab": "Mở trong tab mới",

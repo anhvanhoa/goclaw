@@ -590,6 +590,7 @@
     "pasteHelp": "After approving, copy the full URL from your browser's address bar and paste it here.",
     "pastePlaceholder": "Full callback URL",
     "exchangeFailed": "Code exchange failed",
+    "errCodeMissing": "Pasted URL has no \"code\" parameter — copy the full callback URL from your browser's address bar after approval.",
     "connectedClosing": "Connected — closing…",
     "copyUrl": "Copy URL",
     "openInTab": "Open in new tab",

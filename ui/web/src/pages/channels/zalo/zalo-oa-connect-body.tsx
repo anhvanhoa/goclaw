@@ -17,7 +17,8 @@ interface Props {
 export function ZaloOAConnectBody({ flow, disabled }: Props) {
   const { t } = useTranslation("channels");
   const { url, code, setCode, copied, done, handleCopy, handleOpenInTab,
-    submitting, loadingConsent, consentError, exchangeError } = flow;
+    submitting, loadingConsent, consentError, exchangeError, clientErrorKey } = flow;
+  const clientError = clientErrorKey ? t(clientErrorKey) : null;
 
   const inputDisabled = submitting || done || disabled;
 
@@ -55,7 +56,10 @@ export function ZaloOAConnectBody({ flow, disabled }: Props) {
           disabled={inputDisabled}
           autoFocus
         />
-        {exchangeError && (
+        {clientError && (
+          <p className="text-sm text-destructive">{clientError}</p>
+        )}
+        {exchangeError && !clientError && (
           <p className="text-sm text-destructive">{exchangeError}</p>
         )}
         {done && (

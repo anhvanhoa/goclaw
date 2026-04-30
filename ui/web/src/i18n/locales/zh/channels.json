@@ -475,6 +475,7 @@
     "pasteHelp": "授权后,从浏览器地址栏复制完整 URL 并粘贴到此处。",
     "pastePlaceholder": "完整回调 URL",
     "exchangeFailed": "代码交换失败",
+    "errCodeMissing": "粘贴的 URL 没有 \"code\" 参数 — 请在授权后从浏览器地址栏复制完整的回调 URL。",
     "connectedClosing": "已连接 — 正在关闭…",
     "copyUrl": "复制 URL",
     "openInTab": "在新标签页中打开",

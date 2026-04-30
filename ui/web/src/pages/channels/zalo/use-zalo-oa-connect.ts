@@ -5,8 +5,10 @@ import { useWsCall } from "@/hooks/use-ws-call";
  * extractCode normalizes the paste-code input. Operators can paste either
  * the raw `code` value or the full callback URL Zalo redirected them to
  * (e.g. `https://your-app.com/zalo-callback?oa_id=42...&code=iYP...&state=db8...`).
- * URL parsing runs first — if it looks like an http(s) URL with a `code`
- * query param we pull that out; otherwise we trust the raw value.
+ * URL parsing runs first — if it looks like an http(s) URL we extract the
+ * `code` query param; if absent, return empty code so the caller can show a
+ * "URL has no code parameter" hint instead of forwarding the whole URL to
+ * the server (which rejected it with an opaque error).
  *
  * When the pasted URL carries a `state` query, we opportunistically compare
  * it to the one we stashed from consent_url (mismatch reported; server is
@@ -22,7 +24,7 @@ export function extractCode(input: string, stashedState: string): { code: string
   }
   try {
     const u = new URL(trimmed);
-    const code = u.searchParams.get("code") ?? trimmed;
+    const code = u.searchParams.get("code") ?? "";
     const state = u.searchParams.get("state") ?? "";
     const oaID = u.searchParams.get("oa_id") ?? "";
     return {
@@ -64,6 +66,7 @@ export interface UseZaloOAConnectResult {
   loadingConsent: boolean;
   consentError: string | null;
   exchangeError: string | null;
+  clientErrorKey: string | null; // i18n key; body is responsible for translation
   reset: () => void;
 }
 
@@ -87,6 +90,7 @@ export function useZaloOAConnect(
   const [url, setUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [done, setDone] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
   const firedRef = useRef(false);
   const aliveRef = useRef(true);
 
@@ -122,6 +126,7 @@ export function useZaloOAConnect(
     setUrl("");
     setCopied(false);
     setDone(false);
+    setClientError(null);
     firedRef.current = false;
     consent.reset();
     exchange.reset();
@@ -161,6 +166,11 @@ export function useZaloOAConnect(
     // operators on legit flows where Zalo mangles the redirect but still
     // returns a valid code.
     const { code: finalCode, oaID } = extractCode(code.trim(), state);
+    if (!finalCode) {
+      setClientError("zaloOa.errCodeMissing");
+      return;
+    }
+    setClientError(null);
     try {
       const params: Record<string, unknown> = {
         instance_id: instanceId,
@@ -178,10 +188,15 @@ export function useZaloOAConnect(
     }
   }
 
+  const setCodeWithReset = (c: string) => {
+    setCode(c);
+    if (clientError) setClientError(null);
+  };
+
   return {
     url,
     code,
-    setCode,
+    setCode: setCodeWithReset,
     state,
     copied,
     done,
@@ -192,6 +207,7 @@ export function useZaloOAConnect(
     loadingConsent: consent.loading,
     consentError: consent.error?.message ?? null,
     exchangeError: exchange.error?.message ?? null,
+    clientErrorKey: clientError,
     reset: () => {
       consent.reset();
       exchange.reset();
@@ -199,6 +215,7 @@ export function useZaloOAConnect(
       setState("");
       setUrl("");
       setDone(false);
+      setClientError(null);
       firedRef.current = false;
     },
   };

@@ -38,12 +38,11 @@ describe("extractCode", () => {
     expect(got.mismatchedState).toBe(false);
   });
 
-  it("falls back to raw input when URL has no code param", () => {
-    // Degenerate case — operator pastes a URL without a code param.
-    // Server will reject the exchange; UI just forwards what the operator typed.
+  it("returns empty code when URL has no code param", () => {
     const url = `https://dataplanelabs.com/zalo-callback?oa_id=123`;
     const got = extractCode(url, stashedState);
-    expect(got.code).toBe(url); // treats the whole URL as the "code"
+    expect(got.code).toBe("");
+    expect(got.oaID).toBe("123");
   });
 
   it("handles http:// in addition to https://", () => {
