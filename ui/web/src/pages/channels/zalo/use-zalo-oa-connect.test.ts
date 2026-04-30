@@ -17,7 +17,7 @@ describe("extractCode", () => {
   });
 
   it("extracts code AND oa_id from a real-shape Zalo callback URL", () => {
-    const url = `https://dataplanelabs.com/zalo-callback?oa_id=4245484535895825355&code=iYPhiMZy16swCN-NGUqQVi4lOfXFoX&state=${stashedState}`;
+    const url = `https://example.com/zalo-callback?oa_id=4245484535895825355&code=iYPhiMZy16swCN-NGUqQVi4lOfXFoX&state=${stashedState}`;
     const got = extractCode(url, stashedState);
     expect(got.code).toBe("iYPhiMZy16swCN-NGUqQVi4lOfXFoX");
     expect(got.oaID).toBe("4245484535895825355");
@@ -25,21 +25,21 @@ describe("extractCode", () => {
   });
 
   it("flags mismatched state when callback state != stashed", () => {
-    const url = `https://dataplanelabs.com/zalo-callback?code=abc&state=wrong-state`;
+    const url = `https://example.com/zalo-callback?code=abc&state=wrong-state`;
     const got = extractCode(url, stashedState);
     expect(got.code).toBe("abc");
     expect(got.mismatchedState).toBe(true);
   });
 
   it("does NOT flag mismatch when URL has no state param", () => {
-    const url = `https://dataplanelabs.com/zalo-callback?code=abc`;
+    const url = `https://example.com/zalo-callback?code=abc`;
     const got = extractCode(url, stashedState);
     expect(got.code).toBe("abc");
     expect(got.mismatchedState).toBe(false);
   });
 
   it("returns empty code when URL has no code param", () => {
-    const url = `https://dataplanelabs.com/zalo-callback?oa_id=123`;
+    const url = `https://example.com/zalo-callback?oa_id=123`;
     const got = extractCode(url, stashedState);
     expect(got.code).toBe("");
     expect(got.oaID).toBe("123");
