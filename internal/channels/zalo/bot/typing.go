@@ -27,5 +27,12 @@ func (c *Channel) startTyping(chatID string) {
 		prev.(*typing.Controller).Stop()
 	}
 	c.typingCtrls.Store(chatID, ctrl)
+	// Re-check after Store: Stop() may have flipped IsRunning between the
+	// initial check and Store, leaving ctrl orphaned past Stop's drain.
+	if !c.IsRunning() {
+		c.typingCtrls.Delete(chatID)
+		ctrl.Stop()
+		return
+	}
 	ctrl.Start()
 }
