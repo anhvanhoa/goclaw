@@ -270,7 +270,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	} else if strings.HasPrefix(mt, "image/") {
 		// /upload/image caps at 1MB, jpg/png only. Auto-compress to JPEG.
 		const zaloImageCapBytes = 1 * 1024 * 1024
-		compressed, newMT, cerr := compressForZaloImage(data, mt, zaloImageCapBytes)
+		compressed, newMT, cerr := common.CompressImage(data, mt, zaloImageCapBytes)
 		if cerr != nil {
 			return cerr
 		}

@@ -1,4 +1,4 @@
-package oa
+package common
 
 import (
 	"bytes"
@@ -9,15 +9,13 @@ import (
 	"testing"
 )
 
-// synthesizePNG encodes a PNG of the given dimensions. For the passthrough
-// test we use a small solid image; for the shrink-over-cap test we fill
-// with pseudo-random noise so PNG's DEFLATE can't collapse the output,
-// producing a realistic multi-MB payload.
+// synthesizePNG encodes a PNG of the given dimensions. Solid for passthrough
+// tests; pseudo-random noise for shrink-over-cap tests so DEFLATE can't
+// collapse the output, producing a realistic multi-MB payload.
 func synthesizePNG(t *testing.T, w, h int, noisy bool) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	if noisy {
-		// Deterministic seed so the test is reproducible.
 		r := rand.New(rand.NewPCG(42, 42))
 		for y := range h {
 			for x := range w {
@@ -38,11 +36,11 @@ func synthesizePNG(t *testing.T, w, h int, noisy bool) []byte {
 	return buf.Bytes()
 }
 
-func TestCompressForZaloImage_UnderCapIsPassthrough(t *testing.T) {
+func TestCompressImage_UnderCapIsPassthrough(t *testing.T) {
 	t.Parallel()
 	data := synthesizePNG(t, 100, 100, false)
-	cap := 1 << 20 // 1MB
-	out, mt, err := compressForZaloImage(data, "image/png", cap)
+	cap := 1 << 20
+	out, mt, err := CompressImage(data, "image/png", cap)
 	if err != nil {
 		t.Fatalf("compress: %v", err)
 	}
@@ -54,16 +52,15 @@ func TestCompressForZaloImage_UnderCapIsPassthrough(t *testing.T) {
 	}
 }
 
-func TestCompressForZaloImage_ShrinksOverCap(t *testing.T) {
+func TestCompressImage_ShrinksOverCap(t *testing.T) {
 	t.Parallel()
-	// 1500x1500 random-noise PNG ≈ 6-8 MB — DEFLATE can't compress noise.
 	data := synthesizePNG(t, 1500, 1500, true)
-	cap := 1 << 20 // 1MB
+	cap := 1 << 20
 	if len(data) <= cap {
 		t.Fatalf("synthesized PNG is only %d bytes; expected >1MB", len(data))
 	}
 
-	out, mt, err := compressForZaloImage(data, "image/png", cap)
+	out, mt, err := CompressImage(data, "image/png", cap)
 	if err != nil {
 		t.Fatalf("compress: %v", err)
 	}
@@ -75,12 +72,11 @@ func TestCompressForZaloImage_ShrinksOverCap(t *testing.T) {
 	}
 }
 
-func TestCompressForZaloImage_InvalidDataReturnsError(t *testing.T) {
+func TestCompressImage_InvalidDataReturnsError(t *testing.T) {
 	t.Parallel()
-	// Pass a cap smaller than the garbage bytes so we actually reach the
-	// decode step instead of early-returning via the under-cap passthrough.
+	// cap smaller than payload so we reach decode instead of passthrough.
 	garbage := []byte("not an image, and definitely not bytes the image package can decode.")
-	_, _, err := compressForZaloImage(garbage, "image/png", 10)
+	_, _, err := CompressImage(garbage, "image/png", 10)
 	if err == nil {
 		t.Fatal("expected decode error on garbage bytes")
 	}
@@ -107,16 +103,12 @@ func synthesizeTransparentNoisyPNG(t *testing.T, w, h int) []byte {
 	return buf.Bytes()
 }
 
-// When a transparent image can't fit even at the smallest tried PNG size,
-// the function must flatten onto white and re-encode as JPEG rather than fail.
-func TestCompressForZaloImage_TransparentFallsBackToJPEG(t *testing.T) {
+func TestCompressImage_TransparentFallsBackToJPEG(t *testing.T) {
 	t.Parallel()
-	// 800×800 noisy alpha PNG ≈ 1MB+. With a tight cap, the PNG ladder fails
-	// at every size and the white-flatten JPEG fallback must take over.
 	data := synthesizeTransparentNoisyPNG(t, 800, 800)
-	cap := 200 * 1024 // 200KB — too tight for noisy PNG, comfortable for JPEG.
+	cap := 200 * 1024 // too tight for noisy PNG, comfortable for JPEG
 
-	out, mt, err := compressForZaloImage(data, "image/png", cap)
+	out, mt, err := CompressImage(data, "image/png", cap)
 	if err != nil {
 		t.Fatalf("compress: %v", err)
 	}
@@ -128,13 +120,8 @@ func TestCompressForZaloImage_TransparentFallsBackToJPEG(t *testing.T) {
 	}
 }
 
-// hasTransparency must short-circuit on JPEG MIME without scanning pixels.
-// Verified indirectly: pass an opaque RGBA image with originalMIME=image/jpeg
-// and confirm we never enter the PNG branch (output is JPEG).
 func TestHasTransparency_JPEGShortCircuit(t *testing.T) {
 	t.Parallel()
-	// Even though the image is decoded as RGBA (which COULD carry alpha),
-	// the originalMIME=jpeg short-circuit forces opaque path.
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	for i := range img.Pix {
 		img.Pix[i] = 0xff
@@ -144,7 +131,6 @@ func TestHasTransparency_JPEGShortCircuit(t *testing.T) {
 	}
 }
 
-// hasTransparency must detect alpha in *image.NRGBA via direct Pix walk.
 func TestHasTransparency_DetectsAlphaInNRGBA(t *testing.T) {
 	t.Parallel()
 	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
@@ -154,7 +140,6 @@ func TestHasTransparency_DetectsAlphaInNRGBA(t *testing.T) {
 	if hasTransparency(img, "image/png") {
 		t.Error("fully opaque NRGBA should not report transparency")
 	}
-	// Make one pixel non-opaque.
 	img.Pix[3] = 0x80
 	if !hasTransparency(img, "image/png") {
 		t.Error("expected to detect alpha=0x80 pixel")

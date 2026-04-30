@@ -1,4 +1,4 @@
-package oa
+package common
 
 import (
 	"bytes"
@@ -14,7 +14,13 @@ import (
 	_ "golang.org/x/image/webp" // register WebP decoder
 )
 
-// Zalo OA /v2.0/oa/upload/image rejects payloads over 1MB (error -210).
+// CompressImage shrinks oversized images under maxBytes for any Zalo upload
+// endpoint that caps payload size (OA /v2.0/oa/upload/image: 1MB jpg/png).
+// Bot uploads photos by URL — the URL is typically obtained from the same
+// OA upload endpoint, so Bot inherits the cap transitively.
+//
+// Transparent inputs first try PNG (lossless), then fall back to a
+// white-flattened JPEG so a noisy alpha image doesn't fail the send.
 
 var (
 	jpegQualityLadder = []int{85, 75, 65, 55, 45, 35}
@@ -25,17 +31,17 @@ var (
 // huge dimensions can't pin GB of memory.
 const maxDecodePixels = 25_000_000
 
-func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byte, string, error) {
+func CompressImage(data []byte, originalMIME string, maxBytes int) ([]byte, string, error) {
 	if len(data) <= maxBytes {
 		return data, originalMIME, nil
 	}
 
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, "", fmt.Errorf("zalo_oa: decode image header: %w", err)
+		return nil, "", fmt.Errorf("zalo: decode image header: %w", err)
 	}
 	if int64(cfg.Width)*int64(cfg.Height) > maxDecodePixels {
-		return nil, "", fmt.Errorf("zalo_oa: image dimensions %dx%d exceed %d pixel cap",
+		return nil, "", fmt.Errorf("zalo: image dimensions %dx%d exceed %d pixel cap",
 			cfg.Width, cfg.Height, maxDecodePixels)
 	}
 
@@ -43,12 +49,12 @@ func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byt
 	// after we strip EXIF on re-encode.
 	img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
 	if err != nil {
-		return nil, "", fmt.Errorf("zalo_oa: decode image for compression: %w", err)
+		return nil, "", fmt.Errorf("zalo: decode image for compression: %w", err)
 	}
 
 	if hasTransparency(img, originalMIME) {
 		if out, ok := encodePNGLadder(img, maxBytes); ok {
-			slog.Info("zalo_oa.image.compressed",
+			slog.Info("zalo.image.compressed",
 				"orig_bytes", len(data), "orig_mime", originalMIME,
 				"new_bytes", len(out), "out_mime", "image/png", "transparent", true)
 			return out, "image/png", nil
@@ -62,14 +68,14 @@ func compressForZaloImage(data []byte, originalMIME string, maxBytes int) ([]byt
 		return nil, "", err
 	}
 	if out != nil {
-		slog.Info("zalo_oa.image.compressed",
+		slog.Info("zalo.image.compressed",
 			"orig_bytes", len(data), "orig_mime", originalMIME,
 			"new_bytes", len(out), "out_mime", "image/jpeg",
 			"side", side, "quality", q)
 		return out, "image/jpeg", nil
 	}
 	b := img.Bounds()
-	return nil, "", fmt.Errorf("zalo_oa: image cannot fit under %d bytes (%dx%d original %d bytes)",
+	return nil, "", fmt.Errorf("zalo: image cannot fit under %d bytes (%dx%d original %d bytes)",
 		maxBytes, b.Dx(), b.Dy(), len(data))
 }
 
@@ -165,7 +171,7 @@ func encodeJPEGLadder(img image.Image, maxBytes int) ([]byte, int, int, error) {
 		for _, q := range jpegQualityLadder {
 			var buf bytes.Buffer
 			if err := jpeg.Encode(&buf, scaled, &jpeg.Options{Quality: q}); err != nil {
-				return nil, 0, 0, fmt.Errorf("zalo_oa: jpeg encode (side=%d q=%d): %w", side, q, err)
+				return nil, 0, 0, fmt.Errorf("zalo: jpeg encode (side=%d q=%d): %w", side, q, err)
 			}
 			if buf.Len() <= maxBytes {
 				return buf.Bytes(), side, q, nil
