@@ -92,6 +92,7 @@ Every channel must implement the base interface:
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
 | `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo Bot, Zalo OA, Zalo Personal |
+| `DMQuoteChannel` | Opt into stamping `reply_to_message_id` on DM outbound metadata (group inbounds always stamp it) — channel `Send` translates to platform-specific quote payload (Telegram `ReplyParameters`, Zalo OA `message.quote_message_id`, Pancake `comment_id`) | Zalo OA |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
 

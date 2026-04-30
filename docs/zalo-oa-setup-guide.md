@@ -96,7 +96,15 @@ Pick polling when the gateway has no public HTTPS endpoint. GoClaw will call `li
 | Webhook returns 404 | Slug not registered (channel Stop'd or path traversal) | Re-enable the channel; verify the URL slug matches the **Webhook Path** value on the channel detail |
 | No inbound events after secret pasted | Signature mode reverted to `disabled`, or OA disabled the webhook for 12h non-200 retries | Set signature mode back to `strict`; on the Zalo console re-save the URL to clear the auto-disable |
 
-## 5. Reference
+## 5. Quoted replies
+
+Outbound CS replies automatically quote the user's last inbound message via Zalo's `message.quote_message_id` field on `/v3.0/oa/message/cs`. This is on by default — operators don't need to configure anything.
+
+- Only the **first chunk** of a multi-chunk reply quotes; continuation chunks ship plain.
+- Image / file / GIF sends do not quote (Zalo API doesn't support quoted attachments).
+- If the source message is older than Zalo's 48h interaction window or has been deleted, the gateway transparently retries without the quote field — the reply is still delivered, with a `zalo_oa.send.quote_dropped_payload_error` warning logged for diagnostics.
+
+## 6. Reference
 
 - Backend webhook router: `internal/channels/zalo/common/webhook_router.go`
 - Slug helpers: `internal/channels/zalo/common/slug.go`
