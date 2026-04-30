@@ -122,10 +122,15 @@
       "managers": "Managers"
     },
     "zaloWebhook": {
-      "title": "Webhook URL",
+      "title": "Webhook setup",
       "pathLabel": "Path",
+      "urlLabel": "Webhook URL (paste into Zalo console)",
+      "hostLabel": "Gateway host",
+      "hostHint": "Override the gateway host if Zalo cannot reach this UI's origin. Stored locally per-browser.",
+      "oaIdLabel": "OA ID",
+      "oaIdPlaceholder": "Auto-discovered after Connect",
       "loading": "Loading...",
-      "copy": "Copy path"
+      "copy": "Copy URL"
     },
     "general": {
       "identity": "Identity",
@@ -148,7 +153,15 @@
       "failedSave": "Failed to save",
       "saved": "Saved",
       "updateCredentials": "Update Credentials",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "bootstrapBanner": {
+        "title": "Bootstrap mode: complete setup on Zalo",
+        "step1": "Copy the webhook URL below.",
+        "step2": "On developers.zalo.me Webhook tab, paste the URL → click Thay đổi → Cập nhật. Zalo verifies and saves it.",
+        "step3": "The Khóa bí mật OA field appears. Click the eye icon to reveal it; copy the value.",
+        "step4": "Paste the secret in the Webhook Secret Key field below → Update Credentials.",
+        "note": "While in bootstrap, this channel acks Zalo's verification ping but drops events. Pasting the secret enables signature verification and message processing."
+      }
     },
     "config": {
       "noSchema": "No configuration schema for this channel type.",
@@ -275,13 +288,45 @@
       "label": "Block Reply",
       "help": "Deliver intermediate text during tool iterations"
     },
+    "transport": {
+      "label": "Ingestion Mode",
+      "help": "Webhook is event-driven and lighter on the server. Polling fetches via listrecentchat on a timer."
+    },
+    "webhook_secret_key": {
+      "label": "Webhook Secret Key",
+      "help": "Signing secret from the Zalo dev console (OA → Webhook). Required when Ingestion Mode is Webhook (unless Signature Mode is Disabled). Used to verify X-ZEvent-Signature."
+    },
+    "webhook_signature_mode": {
+      "label": "Signature Mode",
+      "help": "Strict rejects bad signatures. Log-only is for migration. Disabled skips verification. Webhook Secret Key (under Credentials) required for strict/log_only."
+    },
+    "webhook_replay_window_seconds": {
+      "label": "Replay Window (seconds)",
+      "help": "Max age of accepted webhook events. Default 300, range 60–3600."
+    },
+    "catch_up_on_restart": {
+      "label": "Catch Up On Restart",
+      "help": "Run one bounded listrecentchat sweep on Start to backfill events missed while offline."
+    },
+    "poll_interval_seconds": {
+      "label": "Poll Interval (seconds)",
+      "help": "How often to fetch new messages. Min 5, max 120."
+    },
     "poll_count": {
       "label": "Poll Page Size",
-      "help": "Messages fetched per cycle. Default 50, min 10, max 200. Raise if you see polling lag warnings."
+      "help": "Messages fetched per cycle. Default 50, min 10, max 200."
     },
     "poll_burndown_max_pages": {
       "label": "Burn-down Max Pages",
-      "help": "Max consecutive listrecentchat pages per cycle when the OA is bursting. Default 5, max 20. Set to 1 to disable burn-down."
+      "help": "Max consecutive listrecentchat pages per cycle. Default 5, max 20. Set to 1 to disable burn-down."
+    },
+    "redirect_uri": {
+      "label": "Redirect URI",
+      "help": "Set this URL as the Official Account Callback URL at https://developers.zalo.me/app/<app_id>/oa/settings. Mismatch returns error_code=-14003. See docs for full setup."
+    },
+    "webhook_secret": {
+      "label": "Webhook Secret",
+      "help": "Required when transport=webhook. Sent as X-Bot-Api-Secret-Token by Zalo."
     },
     "domain": { "label": "Domain" },
     "connection_mode": {
@@ -294,7 +339,7 @@
     },
     "webhook_path": {
       "label": "Webhook Path",
-      "help": "Path on main server for Lark events"
+      "help": "URL routing path. For Zalo: lowercase letters, numbers, hyphens (2–63 chars), used as /channels/zalo/webhook/<slug>. For Lark: full path on main server (e.g. /feishu/events)."
     },
     "webhook_url": { "label": "Webhook URL" },
     "topic_session_mode": {
@@ -477,6 +522,11 @@
     "description": "Your Lark/Feishu app must have these scopes enabled in the Developer Console. Publish a new app version after adding permissions.",
     "publishReminder": "After adding scopes, set Contact Range to \"All members\" and publish a new app version for changes to take effect."
   },
+  "zaloOaEvents": {
+    "title": "Enable these events on the Zalo console",
+    "description": "After saving the Webhook URL on developers.zalo.me, toggle each of the following events ON in the event list. Anything left OFF will silently never reach the agent.",
+    "location": "Webhook tab → \"Danh sách sự kiện webhook\" → flip Tắt / Bật to ON for each event above."
+  },
   "toast": {
     "created": "Channel created",
     "createdDesc": "{{name}} has been added",
@@ -527,13 +577,14 @@
   },
   "zaloOa": {
     "dialogTitle": "Connect Zalo OA — {{name}}",
-    "dialogDescription": "Authorize the Official Account, then paste the code returned by Zalo.",
+    "dialogDescription": "Authorize the Official Account, then paste the redirect URL from your browser.",
     "step1Heading": "Step 1 — Authorize",
-    "step2Heading": "Step 2 — Paste authorization code",
+    "step2Heading": "Step 2 — Paste callback URL",
+    "authorizeHelp": "Open the URL below (use the arrow icon), sign in to Zalo and approve access for the Official Account. After approving, your browser lands on the redirect URI — leave that tab open for Step 2.",
     "consentLoading": "Generating consent URL…",
     "consentFailed": "Failed to fetch consent URL",
-    "pasteHelp": "After approving, Zalo redirects to your callback URL with `?code=...&state=...`. Paste either the full URL from your browser's address bar or just the `code` value — both work.",
-    "pastePlaceholder": "Full callback URL or raw code",
+    "pasteHelp": "After approving, copy the full URL from your browser's address bar and paste it here.",
+    "pastePlaceholder": "Full callback URL",
     "exchangeFailed": "Code exchange failed",
     "connectedClosing": "Connected — closing…",
     "copyUrl": "Copy URL",

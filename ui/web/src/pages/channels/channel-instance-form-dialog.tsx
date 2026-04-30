@@ -84,7 +84,18 @@ export function ChannelInstanceFormDialog({
         agentId: instance?.agent_id ?? (agents[0]?.id ?? ""),
         enabled: instance?.enabled ?? true,
       });
-      setCredsValues({});
+      // Pre-populate non-password credential fields when editing — backend
+      // exposes them unmasked (e.g. zalo_oa.redirect_uri), secrets stay "***".
+      const credsInit: Record<string, unknown> = {};
+      if (instance?.credentials) {
+        const credsSchema = credentialsSchema[instance.channel_type] ?? [];
+        for (const f of credsSchema) {
+          if (f.type === "password") continue;
+          const v = instance.credentials[f.key];
+          if (v !== undefined && v !== null && v !== "***" && v !== "") credsInit[f.key] = v;
+        }
+      }
+      setCredsValues(credsInit);
 
       const ct = instance?.channel_type ?? "telegram";
       const schema = configSchema[ct] ?? [];

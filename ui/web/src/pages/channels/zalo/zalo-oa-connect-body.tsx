@@ -25,6 +25,7 @@ export function ZaloOAConnectBody({ flow, disabled }: Props) {
     <div className="flex flex-col gap-5 py-2">
       <section className="space-y-2">
         <h3 className="text-sm font-medium">{t("zaloOa.step1Heading")}</h3>
+        <p className="text-xs text-muted-foreground">{t("zaloOa.authorizeHelp")}</p>
         {loadingConsent && (
           <p className="text-sm text-muted-foreground">{t("zaloOa.consentLoading")}</p>
         )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Check } from "lucide-react";
 
@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWsCall } from "@/hooks/use-ws-call";
+import { useWebhookHost } from "./use-webhook-host";
 
 interface WebhookURLResp {
   path: string;
+  slug?: string;
   instance_id: string;
   hint: string;
+  oa_id?: string;
 }
 
 interface ZaloWebhookURLSectionProps {
@@ -19,15 +22,16 @@ interface ZaloWebhookURLSectionProps {
 }
 
 /**
- * Renders the webhook path returned by `channels.instances.zalo.webhook_url`.
- * The RPC intentionally returns only the path — operator prepends their own
- * gateway host (B3: no fabricated gateway.PublicBaseURL config).
+ * Webhook setup card. Renders the full URL using window.location.origin (or
+ * persisted override) so operators can copy a paste-ready string for the
+ * Zalo dev console without scrolling between sections.
  */
 export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookURLSectionProps) {
   const { t } = useTranslation("channels");
   const { call, loading, error } = useWsCall<WebhookURLResp>("channels.instances.zalo.webhook_url");
   const [data, setData] = useState<WebhookURLResp | null>(null);
   const [copied, setCopied] = useState(false);
+  const [host, setHost] = useWebhookHost();
 
   useEffect(() => {
     if (!instanceId) return;
@@ -39,14 +43,20 @@ export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookUR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
+  const fullURL = useMemo(() => {
+    if (!data?.path) return "";
+    const trimmed = host.replace(/\/+$/, "");
+    return `${trimmed}${data.path}`;
+  }, [host, data?.path]);
+
   if (channelType !== "zalo_bot" && channelType !== "zalo_oa") {
     return null;
   }
 
   async function handleCopy() {
-    if (!data?.path) return;
+    if (!fullURL) return;
     try {
-      await navigator.clipboard.writeText(data.path);
+      await navigator.clipboard.writeText(fullURL);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -56,12 +66,29 @@ export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookUR
 
   return (
     <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-      <h3 className="text-sm font-medium">{t("detail.zaloWebhook.title", { defaultValue: "Webhook URL" })}</h3>
+      <h3 className="text-sm font-medium">{t("detail.zaloWebhook.title", { defaultValue: "Webhook setup" })}</h3>
+
       <div className="grid gap-1.5">
-        <Label>{t("detail.zaloWebhook.pathLabel", { defaultValue: "Path" })}</Label>
+        <Label htmlFor="cd-webhook-host">{t("detail.zaloWebhook.hostLabel", { defaultValue: "Gateway host" })}</Label>
+        <Input
+          id="cd-webhook-host"
+          value={host}
+          onChange={(e) => setHost(e.target.value)}
+          placeholder="https://gw.example.com"
+          className="text-base md:text-sm font-mono"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("detail.zaloWebhook.hostHint", {
+            defaultValue: "Override the gateway host if Zalo cannot reach this UI's origin. Stored locally per-browser.",
+          })}
+        </p>
+      </div>
+
+      <div className="grid gap-1.5">
+        <Label>{t("detail.zaloWebhook.urlLabel", { defaultValue: "Webhook URL (paste into Zalo console)" })}</Label>
         <div className="flex gap-2">
           <Input
-            value={loading ? "" : (data?.path ?? "")}
+            value={loading ? "" : fullURL}
             placeholder={loading ? t("detail.zaloWebhook.loading", { defaultValue: "Loading..." }) : ""}
             readOnly
             className="text-base md:text-sm font-mono"
@@ -71,8 +98,8 @@ export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookUR
             variant="outline"
             size="sm"
             onClick={handleCopy}
-            disabled={!data?.path}
-            aria-label={t("detail.zaloWebhook.copy", { defaultValue: "Copy path" })}
+            disabled={!fullURL}
+            aria-label={t("detail.zaloWebhook.copy", { defaultValue: "Copy URL" })}
           >
             {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
@@ -84,6 +111,18 @@ export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookUR
           <p className="text-xs text-destructive">{error.message}</p>
         )}
       </div>
+
+      {channelType === "zalo_oa" && (
+        <div className="grid gap-1.5">
+          <Label>{t("detail.zaloWebhook.oaIdLabel", { defaultValue: "OA ID" })}</Label>
+          <Input
+            value={data?.oa_id ?? ""}
+            placeholder={t("detail.zaloWebhook.oaIdPlaceholder", { defaultValue: "Auto-discovered after Connect" })}
+            readOnly
+            className="text-base md:text-sm font-mono"
+          />
+        </div>
+      )}
     </section>
   );
 }

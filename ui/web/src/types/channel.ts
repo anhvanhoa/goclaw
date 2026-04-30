@@ -8,6 +8,10 @@ export interface ChannelInstanceData {
   enabled: boolean;
   is_default: boolean;
   has_credentials: boolean;
+  /** Credentials map with secrets masked as "***". Non-secret fields
+   *  (per channel-type allowlist server-side) carry actual values for
+   *  form pre-population. */
+  credentials?: Record<string, unknown>;
   created_by: string;
   created_at: string;
   updated_at: string;
