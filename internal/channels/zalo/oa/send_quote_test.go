@@ -318,7 +318,7 @@ func TestQuoteInboundOnDM_HonorsConfig(t *testing.T) {
 		ptr  *bool
 		want bool
 	}{
-		{"unset_defaults_on", nil, true},
+		{"unset_defaults_off", nil, false},
 		{"explicit_true", &on, true},
 		{"explicit_false", &off, false},
 	}

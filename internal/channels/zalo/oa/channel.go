@@ -150,11 +150,11 @@ func (c *Channel) ForceRefreshForTest() {
 func (c *Channel) Type() string { return channels.TypeZaloOA }
 
 // QuoteInboundOnDM gates auto-stamping of metadata["reply_to_message_id"]
-// upstream. Default on. Explicit metadata from callers (e.g. agent tools)
+// upstream. Default off. Explicit metadata from callers (e.g. agent tools)
 // is still honored in Send regardless.
 func (c *Channel) QuoteInboundOnDM() bool {
 	if c.cfg.QuoteUserMessage == nil {
-		return true
+		return false
 	}
 	return *c.cfg.QuoteUserMessage
 }

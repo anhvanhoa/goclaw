@@ -205,7 +205,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs (empty = allow all)" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal (terminal only)" }, { value: "full", label: "Full (+ thinking ack)" }], defaultValue: "minimal", help: "Drop a Zalo emoji on the user's message to signal agent run state. OA caps reactions at 50 per message_id — Minimal (1–2 reactions per run) is the recommended default. Requires the 'Thả biểu tượng cảm xúc vào tin nhắn' scope approved on the Zalo Developer console." },
-    { key: "quote_user_message", label: "Quote user message", type: "boolean", defaultValue: true, help: "Reply by quoting the user's last inbound message (Zalo's reply-to). Turn off for plain replies without quote." },
+    { key: "quote_user_message", label: "Quote user message", type: "boolean", defaultValue: false, help: "Reply by quoting the user's last inbound message (Zalo's reply-to). Turn on for CS-style threaded replies." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   zalo_personal: [

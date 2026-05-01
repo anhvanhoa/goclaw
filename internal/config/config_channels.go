@@ -170,7 +170,7 @@ type ZaloOAConfig struct {
 	DMPolicy             string              `json:"dm_policy,omitempty"`
 	BlockReply           *bool               `json:"block_reply,omitempty"`
 	ReactionLevel        string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — status emoji reactions
-	QuoteUserMessage     *bool               `json:"quote_user_message,omitempty"` // default true: quote the user's last inbound message in CS replies
+	QuoteUserMessage     *bool               `json:"quote_user_message,omitempty"` // default false: quote the user's last inbound message in CS replies
 
 	Transport                  string `json:"transport,omitempty"`                     // "polling" (default) | "webhook"
 	WebhookPath                string `json:"webhook_path,omitempty"`                  // per-instance routing slug appended to /channels/zalo/webhook/
