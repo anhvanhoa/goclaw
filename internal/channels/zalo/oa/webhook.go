@@ -27,6 +27,7 @@ type oaInboundEvent struct {
 		MessageID   string         `json:"message_id,omitempty"`
 		MsgID       string         `json:"msg_id,omitempty"` // alternate field in some OA payloads
 		Text        string         `json:"text,omitempty"`
+		Time        int64          `json:"time,omitempty"`
 		Attachments []oaAttachment `json:"attachments,omitempty"`
 	} `json:"message"`
 }
@@ -68,10 +69,14 @@ func (c *Channel) HandleWebhookEvent(ctx context.Context, raw json.RawMessage) e
 	}
 
 	// Advance the per-sender cursor so a post-restart catch-up sweep skips
-	// messages already delivered via webhook. Webhook + catchup share the
-	// same dedup key (cursor timestamp) so overlap is harmless.
+	// messages already delivered via webhook. Prefer message.time (matches
+	// poll.go's cursor semantic); fall back to envelope timestamp only when
+	// absent. Mixing message-time vs envelope-time would let envelope skew
+	// over-advance the cursor and silently skip later messages on burst.
 	if e.Sender.ID != "" {
-		if ts, err := extractTimestamp(raw); err == nil && ts > 0 {
+		if e.Message.Time > 0 {
+			c.cursor.Advance(e.Sender.ID, e.Message.Time)
+		} else if ts, err := extractTimestamp(raw); err == nil && ts > 0 {
 			c.cursor.Advance(e.Sender.ID, ts)
 		}
 	}
@@ -91,6 +96,11 @@ func (c *Channel) HandleWebhookEvent(ctx context.Context, raw json.RawMessage) e
 		return nil
 	case "user_follow", "user_unfollow":
 		slog.Info("zalo_oa.webhook.follow_event", "event", e.EventName, "user_id", e.Sender.ID)
+		return nil
+	case "oa_send_text", "oa_send_image", "oa_send_gif", "oa_send_sticker",
+		"oa_send_file", "oa_send_link", "oa_send_list", "oa_send_request_user_info":
+		// Name-match in case Zalo's payload shape change ever bypasses Sender.ID == OAID.
+		slog.Debug("zalo_oa.webhook.outbound_mirror_dropped", "event", e.EventName)
 		return nil
 	default:
 		slog.Debug("zalo_oa.webhook.unknown_event", "event", e.EventName)

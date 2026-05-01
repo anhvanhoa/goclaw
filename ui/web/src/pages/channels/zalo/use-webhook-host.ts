@@ -23,13 +23,15 @@ export function useWebhookHost(): [string, (next: string) => void] {
 
   const [host, setHost] = useState<string>(() => {
     if (typeof window === "undefined") return "";
+    if (!tenantId) return defaultHost();
     return window.localStorage.getItem(key) ?? defaultHost();
   });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!tenantId) return;
     setHost(window.localStorage.getItem(key) ?? defaultHost());
-  }, [key]);
+  }, [key, tenantId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

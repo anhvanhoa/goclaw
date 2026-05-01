@@ -79,9 +79,11 @@ func (m *ZaloOAMethods) handleConsentURL(ctx context.Context, client *gateway.Cl
 		return
 	}
 	if inst.TenantID != client.TenantID() {
-		// Defense-in-depth: store-layer Get already filters by tenant_id,
-		// but a future refactor that loosens that check shouldn't allow
-		// cross-tenant consent URL leakage.
+		slog.Warn("security.cross_tenant_access_attempt",
+			"method", "zalo_oa.consent_url",
+			"instance_id", instID,
+			"instance_tenant_id", inst.TenantID,
+			"client_tenant_id", client.TenantID())
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
 		return
 	}
@@ -154,6 +156,11 @@ func (m *ZaloOAMethods) handleExchangeCode(ctx context.Context, client *gateway.
 		return
 	}
 	if inst.TenantID != client.TenantID() {
+		slog.Warn("security.cross_tenant_access_attempt",
+			"method", "zalo_oa.exchange_code",
+			"instance_id", instID,
+			"instance_tenant_id", inst.TenantID,
+			"client_tenant_id", client.TenantID())
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
 		return
 	}

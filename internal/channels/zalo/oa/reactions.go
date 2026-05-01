@@ -84,6 +84,12 @@ func (rc *zaloReactionController) SetStatus(ctx context.Context, status string) 
 	}
 
 	rc.cancelDebounceLocked()
+	// Re-check stopCh under lock: wg.Add after Stop's Wait would panic.
+	select {
+	case <-rc.ch.stopCh:
+		return
+	default:
+	}
 	rc.ch.reactionWG.Add(1)
 	rc.debounceTimer = time.AfterFunc(reactionDebounceMs, func() {
 		defer rc.ch.reactionWG.Done()

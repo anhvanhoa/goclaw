@@ -238,11 +238,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !r.rateLimiter.Allow(instanceID.String()) {
-		http.Error(w, "rate limited", http.StatusTooManyRequests)
-		return
-	}
-
 	body, err := io.ReadAll(io.LimitReader(req.Body, r.maxBodySize))
 	if err != nil {
 		http.Error(w, "read error", http.StatusBadRequest)
@@ -256,6 +251,13 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			"remote", req.RemoteAddr,
 			"err", err)
 		http.Error(w, "signature mismatch", http.StatusUnauthorized)
+		return
+	}
+
+	// Limit AFTER signature verify so a guessed slug can't burn the bucket
+	// for legitimate Zalo deliveries. HMAC verify is cheap (~µs).
+	if !r.rateLimiter.Allow(instanceID.String()) {
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
 		return
 	}
 

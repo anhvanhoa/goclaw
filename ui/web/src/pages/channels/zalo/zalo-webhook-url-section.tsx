@@ -54,11 +54,18 @@ export function ZaloWebhookURLSection({ instanceId, channelType }: ZaloWebhookUR
 
   useEffect(() => {
     if (!instanceId) return;
+    let cancelled = false;
     call({ instance_id: instanceId })
-      .then(setData)
+      .then((resp) => {
+        if (cancelled) return;
+        setData(resp);
+      })
       .catch(() => {
         // error captured by hook
       });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 

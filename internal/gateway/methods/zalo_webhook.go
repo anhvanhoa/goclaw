@@ -55,6 +55,11 @@ func (m *ZaloWebhookMethods) handleWebhookURL(ctx context.Context, client *gatew
 		return
 	}
 	if inst.TenantID != client.TenantID() {
+		slog.Warn("security.cross_tenant_access_attempt",
+			"method", "zalo.webhook_url",
+			"instance_id", instID,
+			"instance_tenant_id", inst.TenantID,
+			"client_tenant_id", client.TenantID())
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgInstanceNotFound)))
 		return
 	}
