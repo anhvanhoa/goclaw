@@ -12,8 +12,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 )
 
-// HandleWebhookEvent runs a webhook-pushed update through the same
-// processUpdate path used by polling. Shape matches getUpdates.
+// HandleWebhookEvent unwraps the {ok, result} envelope per
+// bot.zapps.me/docs/apis/webhook; polling already strips it inside
+// callAPIWith.
 func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) error {
 	if c.inBootstrap() {
 		n := c.bootstrapDroppedCount.Add(1)
@@ -30,12 +31,18 @@ func (c *Channel) HandleWebhookEvent(_ context.Context, raw json.RawMessage) err
 		return nil
 	}
 
+	var wrap zaloAPIResponse
+	if err := json.Unmarshal(raw, &wrap); err != nil {
+		return fmt.Errorf("zalo_bot.webhook: decode envelope: %w", err)
+	}
+	if !wrap.OK || len(wrap.Result) == 0 {
+		return nil
+	}
 	var u zaloUpdate
-	if err := json.Unmarshal(raw, &u); err != nil {
-		return fmt.Errorf("zalo_bot.webhook: decode update: %w", err)
+	if err := json.Unmarshal(wrap.Result, &u); err != nil {
+		return fmt.Errorf("zalo_bot.webhook: decode result: %w", err)
 	}
 
-	// Self-echo filter lives in processUpdate so polling and webhook share it.
 	c.processUpdate(u)
 	return nil
 }
@@ -89,12 +96,14 @@ type botMessageIDExtractor struct{}
 
 func (botMessageIDExtractor) ExtractMessageID(raw json.RawMessage) string {
 	var probe struct {
-		Message struct {
-			MessageID string `json:"message_id"`
-		} `json:"message"`
+		Result struct {
+			Message struct {
+				MessageID string `json:"message_id"`
+			} `json:"message"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return ""
 	}
-	return probe.Message.MessageID
+	return probe.Result.Message.MessageID
 }

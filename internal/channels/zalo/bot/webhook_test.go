@@ -65,9 +65,12 @@ func TestBotSignatureVerifier_AcceptsMatchingSecret(t *testing.T) {
 
 func TestBotMessageIDExtractor(t *testing.T) {
 	e := botMessageIDExtractor{}
-	got := e.ExtractMessageID(json.RawMessage(`{"event_name":"x","message":{"message_id":"m123"}}`))
+	got := e.ExtractMessageID(json.RawMessage(`{"ok":true,"result":{"event_name":"x","message":{"message_id":"m123"}}}`))
 	if got != "m123" {
 		t.Errorf("got %q, want m123", got)
+	}
+	if got := e.ExtractMessageID(json.RawMessage(`{"event_name":"x","message":{"message_id":"m123"}}`)); got != "" {
+		t.Errorf("unwrapped payload should yield empty (got %q)", got)
 	}
 	if e.ExtractMessageID(json.RawMessage(`{}`)) != "" {
 		t.Error("missing message_id should yield empty string")
@@ -79,7 +82,7 @@ func TestBotMessageIDExtractor(t *testing.T) {
 
 func TestHandleWebhookEvent_DispatchesToBus(t *testing.T) {
 	ch, mb := newWebhookTestChannel(t, "s3cret")
-	payload := `{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"alice"},"chat":{"id":"alice"}}}`
+	payload := `{"ok":true,"result":{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"alice"},"chat":{"id":"alice"}}}}`
 	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
 		t.Fatalf("HandleWebhookEvent: %v", err)
 	}
@@ -96,7 +99,7 @@ func TestHandleWebhookEvent_DispatchesToBus(t *testing.T) {
 
 func TestHandleWebhookEvent_FiltersSelfEcho(t *testing.T) {
 	ch, mb := newWebhookTestChannel(t, "s3cret")
-	payload := `{"event_name":"message.text.received","message":{"message_id":"m1","text":"echo","from":{"id":"bot-self"},"chat":{"id":"someone"}}}`
+	payload := `{"ok":true,"result":{"event_name":"message.text.received","message":{"message_id":"m1","text":"echo","from":{"id":"bot-self"},"chat":{"id":"someone"}}}}`
 	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
 		t.Fatalf("HandleWebhookEvent: %v", err)
 	}
@@ -104,6 +107,49 @@ func TestHandleWebhookEvent_FiltersSelfEcho(t *testing.T) {
 	defer cancel()
 	if _, ok := mb.ConsumeInbound(ctx); ok {
 		t.Error("self-echo should not have published an inbound message")
+	}
+}
+
+// Fixture verbatim from https://bot.zapps.me/docs/apis/webhook.
+func TestHandleWebhookEvent_DocsSamplePayload(t *testing.T) {
+	ch, mb := newWebhookTestChannel(t, "s3cret")
+	payload := `{
+		"ok": true,
+		"result": {
+			"message": {
+				"from": {"id": "6ede9afa66b88fe6d6a9", "display_name": "Ted", "is_bot": false},
+				"chat": {"id": "6ede9afa66b88fe6d6a9", "chat_type": "PRIVATE"},
+				"text": "Xin chào",
+				"message_id": "2d758cb5e222177a4e35",
+				"date": 1750316131602
+			},
+			"event_name": "message.text.received"
+		}
+	}`
+	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
+		t.Fatalf("HandleWebhookEvent: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	got, ok := mb.ConsumeInbound(ctx)
+	if !ok {
+		t.Fatal("docs-sample payload did not publish an inbound message")
+	}
+	if got.Content != "Xin chào" {
+		t.Errorf("content = %q, want Xin chào", got.Content)
+	}
+}
+
+func TestHandleWebhookEvent_DropsWhenOkFalse(t *testing.T) {
+	ch, mb := newWebhookTestChannel(t, "s3cret")
+	payload := `{"ok":false,"description":"some error"}`
+	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
+		t.Fatalf("HandleWebhookEvent: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, ok := mb.ConsumeInbound(ctx); ok {
+		t.Error("ok=false envelope should not dispatch")
 	}
 }
 
@@ -158,7 +204,7 @@ func TestBootstrap_VerifierAcceptsAnything_HandlerDrops(t *testing.T) {
 		t.Errorf("bootstrap verifier should accept arbitrary token; got %v", err)
 	}
 
-	payload := `{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"alice"},"chat":{"id":"alice"}}}`
+	payload := `{"ok":true,"result":{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"alice"},"chat":{"id":"alice"}}}}`
 	if err := ch.HandleWebhookEvent(context.Background(), json.RawMessage(payload)); err != nil {
 		t.Fatalf("HandleWebhookEvent in bootstrap: %v", err)
 	}
