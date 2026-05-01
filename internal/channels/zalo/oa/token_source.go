@@ -90,7 +90,11 @@ func (ts *tokenSource) doRefresh(ctx context.Context) error {
 	cur := ts.Snapshot()
 	if cur.RefreshToken == "" {
 		// Pre-authorization: distinct from a burned refresh token; do NOT
-		// escalate to Failed.
+		// escalate to Failed. Log so ops can distinguish "never consented"
+		// (OAID empty) from "consent dropped mid-flow" (OAID set).
+		slog.Info("zalo_oa.pre_authorization",
+			"instance_id", ts.instanceID,
+			"has_oa_id", cur.OAID != "")
 		return ErrNotAuthorized
 	}
 
