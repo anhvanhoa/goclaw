@@ -254,8 +254,8 @@
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
     "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
-    "transport": { "label": "接入模式", "help": "Webhook 基于事件，对服务器更轻。Polling 通过 listrecentchat 定时拉取。" },
-    "webhook_secret_key": { "label": "Webhook 密钥", "help": "来自 Zalo 开发者控制台（OA → Webhook）的签名密钥。当接入模式为 Webhook 时必填（除非签名模式为 Disabled）。用于校验 X-ZEvent-Signature。" },
+    "transport": { "label": "连接模式", "help": "Webhook 基于事件，更轻量。Polling 定时拉取消息 — 在没有公网 URL 时作为回退方案。" },
+    "webhook_secret_key": { "label": "Webhook 密钥", "help": "来自 Zalo 开发者控制台（OA → Webhook）的签名密钥。当连接模式为 Webhook 时必填（除非签名模式为 Disabled）。用于校验 X-ZEvent-Signature。" },
     "webhook_signature_mode": { "label": "签名模式", "help": "Disabled 跳过校验 — 最容易上线。配置好 Webhook 密钥（在凭据中）后再切换到 Strict；Log-only 是迁移过渡阶段。" },
     "webhook_replay_window_seconds": { "label": "重放窗口（秒）", "help": "接受 webhook 事件的最大时长。默认 300，范围 60–3600。" },
     "catch_up_on_restart": { "label": "重启后追赶", "help": "Start 时执行一次有界的 listrecentchat 扫描，补回离线期间漏掉的事件。" },
@@ -263,7 +263,7 @@
     "poll_count": { "label": "轮询页大小", "help": "每次 listrecentchat 调用的消息数。Zalo 上限为 10 — 超过会返回错误 -210。" },
     "poll_burndown_max_pages": { "label": "Burn-down 最大页数", "help": "每个周期连续 listrecentchat 的最大页数（页大小 × 最大页数 = 排空消息总数）。默认 10，最大 20。设为 1 可禁用 burn-down。" },
     "redirect_uri": { "label": "Redirect URI", "help": "在 https://developers.zalo.me/app/<app_id>/oa/settings 将此 URL 设为 Official Account Callback URL。不一致会返回 error_code=-14003。完整设置见文档。" },
-    "webhook_secret": { "label": "Webhook 密钥", "help": "transport=webhook 时必填。Zalo 通过 X-Bot-Api-Secret-Token 头发送。" },
+    "webhook_secret": { "label": "Webhook 密钥", "help": "由 bot.zapps.me 在你设置 webhook URL 时生成。复制并粘贴到此处。未设置前，此通道运行在 bootstrap 模式（以 HTTP 200 回应 Zalo 的验证 ping，但丢弃事件）。" },
     "domain": { "label": "域名" },
     "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
@@ -287,12 +287,6 @@
     "private_reply_message": {
       "label": "私信内容",
       "help": "支持 commenter_name 和 post_title 占位符。留空使用英文默认文本。"
-    },
-    "generate": {
-      "button": "生成",
-      "toast": "已生成密钥。请立即复制 Webhook Secret 并粘贴到 bot.zapps.me → setWebhook → secret_token。",
-      "show": "显示密钥",
-      "hide": "隐藏密钥"
     }
   },
   "fieldOptions": {
@@ -329,6 +323,10 @@
     "connection_mode": {
       "webhook": "Webhook",
       "websocket": "WebSocket（推荐）"
+    },
+    "transport": {
+      "webhook": "Webhook（推荐）",
+      "polling": "Polling"
     },
     "topic_session_mode": {
       "disabled": "禁用",

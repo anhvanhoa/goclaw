@@ -254,8 +254,8 @@
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },
     "block_reply": { "label": "Phản hồi khối", "help": "Gửi văn bản trung gian trong quá trình lặp công cụ" },
-    "transport": { "label": "Chế độ nhận tin", "help": "Webhook hoạt động theo sự kiện và nhẹ hơn cho server. Polling lấy tin qua listrecentchat theo chu kỳ." },
-    "webhook_secret_key": { "label": "Khóa bí mật Webhook", "help": "Khóa ký từ Zalo dev console (OA → Webhook). Bắt buộc khi Chế độ nhận tin = Webhook (trừ khi Chế độ chữ ký = Disabled). Dùng để xác thực X-ZEvent-Signature." },
+    "transport": { "label": "Chế độ kết nối", "help": "Webhook hoạt động theo sự kiện và nhẹ hơn. Polling lấy tin theo chu kỳ — phương án dự phòng khi không có URL công khai." },
+    "webhook_secret_key": { "label": "Khóa bí mật Webhook", "help": "Khóa ký từ Zalo dev console (OA → Webhook). Bắt buộc khi Chế độ kết nối = Webhook (trừ khi Chế độ chữ ký = Disabled). Dùng để xác thực X-ZEvent-Signature." },
     "webhook_signature_mode": { "label": "Chế độ chữ ký", "help": "Disabled bỏ qua xác thực — dễ khởi tạo nhất. Chuyển sang Strict sau khi đã đặt Webhook Secret Key (trong Credentials); Log-only là bước trung gian khi di chuyển." },
     "webhook_replay_window_seconds": { "label": "Cửa sổ replay (giây)", "help": "Thời gian tối đa chấp nhận sự kiện webhook. Mặc định 300, khoảng 60–3600." },
     "catch_up_on_restart": { "label": "Bắt kịp khi khởi động lại", "help": "Chạy một lần listrecentchat có giới hạn lúc Start để bù sự kiện bị bỏ lỡ khi offline." },
@@ -263,7 +263,7 @@
     "poll_count": { "label": "Số tin/lượt poll", "help": "Số tin nhắn mỗi lần gọi listrecentchat. Zalo giới hạn ở 10 — vượt quá trả về lỗi -210." },
     "poll_burndown_max_pages": { "label": "Số trang burn-down tối đa", "help": "Số trang listrecentchat liên tiếp tối đa mỗi chu kỳ (page size × max pages = số tin được drain). Mặc định 10, tối đa 20. Đặt 1 để tắt burn-down." },
     "redirect_uri": { "label": "Redirect URI", "help": "Đặt URL này làm Official Account Callback URL tại https://developers.zalo.me/app/<app_id>/oa/settings. Sai khớp sẽ trả error_code=-14003. Xem docs để biết hướng dẫn đầy đủ." },
-    "webhook_secret": { "label": "Webhook Secret", "help": "Bắt buộc khi transport=webhook. Zalo gửi qua header X-Bot-Api-Secret-Token." },
+    "webhook_secret": { "label": "Webhook Secret", "help": "Do bot.zapps.me sinh ra khi bạn cấu hình webhook URL ở đó. Sao chép và dán vào đây. Khi chưa đặt, kênh chạy ở chế độ bootstrap (trả lời ping xác minh của Zalo bằng HTTP 200 nhưng bỏ qua các sự kiện)." },
     "domain": { "label": "Tên miền" },
     "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
@@ -287,12 +287,6 @@
     "private_reply_message": {
       "label": "Nội dung DM",
       "help": "Hỗ trợ biến commenter_name và post_title. Để trống dùng mặc định tiếng Anh."
-    },
-    "generate": {
-      "button": "Tạo",
-      "toast": "Đã tạo secret. Hãy sao chép Webhook Secret ngay và dán vào bot.zapps.me → setWebhook → secret_token.",
-      "show": "Hiện secret",
-      "hide": "Ẩn secret"
     }
   },
   "fieldOptions": {
@@ -329,6 +323,10 @@
     "connection_mode": {
       "webhook": "Webhook",
       "websocket": "WebSocket (khuyên dùng)"
+    },
+    "transport": {
+      "webhook": "Webhook (khuyên dùng)",
+      "polling": "Polling"
     },
     "topic_session_mode": {
       "disabled": "Tắt",
