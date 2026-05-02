@@ -74,7 +74,7 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			return
 		}
 
-		if msg := m.authorizePredefinedAgentEdit(ctx, ag, protocol.MethodAgentsUpdate, ""); msg != "" {
+		if msg := m.authorizePredefinedAgentEdit(ctx, ag, client.UserID(), protocol.MethodAgentsUpdate, ""); msg != "" {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, msg))
 			return
 		}

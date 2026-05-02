@@ -95,18 +95,16 @@ func newGuardMethods(t *testing.T, stub store.AgentStore, ownerIDs ...string) *A
 	}
 }
 
-// guardCtx reproduces the minimum router.handleRequest injects so handlers see
-// the same tenantID / role / userID values they would in production.
-func guardCtx(client *gateway.Client, userID string) context.Context {
+// guardCtx mirrors what router.handleRequest injects in production: locale,
+// tenantID, tenantSlug, role — but NOT userID. Handlers that need userID
+// must read it from client.UserID(); see authorizePredefinedAgentEdit.
+func guardCtx(client *gateway.Client) context.Context {
 	ctx := context.Background()
 	if tid := client.TenantID(); tid != uuid.Nil {
 		ctx = store.WithTenantID(ctx, tid)
 	}
 	if role := client.Role(); role != "" {
 		ctx = store.WithRole(ctx, string(role))
-	}
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
 	}
 	return ctx
 }

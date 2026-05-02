@@ -26,7 +26,7 @@ func TestFilesSet_MasterCanEditPredefined_OtherUserAgent(t *testing.T) {
 		"content": "# soul (master edit)",
 	})
 
-	m.handleFilesSet(guardCtx(client, "system"), client, req)
+	m.handleFilesSet(guardCtx(client), client, req)
 
 	if stub.setFileRecorded() != 1 {
 		t.Fatalf("SetAgentContextFile called %d times, want 1", stub.setFileRecorded())
@@ -59,7 +59,7 @@ func TestFilesSet_OwnerCanEditOwnPredefined(t *testing.T) {
 		"content": "# soul (owner edit)",
 	})
 
-	m.handleFilesSet(guardCtx(client, "alice"), client, req)
+	m.handleFilesSet(guardCtx(client), client, req)
 
 	if stub.setFileRecorded() != 1 {
 		t.Fatalf("SetAgentContextFile called %d times, want 1", stub.setFileRecorded())
@@ -84,7 +84,7 @@ func TestFilesSet_NonOwnerNonMaster_Rejected(t *testing.T) {
 		"content": "# soul (unauthorized)",
 	})
 
-	m.handleFilesSet(guardCtx(client, "bob"), client, req)
+	m.handleFilesSet(guardCtx(client), client, req)
 
 	if stub.setFileRecorded() != 0 {
 		t.Fatalf("SetAgentContextFile called %d times, want 0 (rejected write must not mutate)", stub.setFileRecorded())
@@ -109,7 +109,7 @@ func TestFilesSet_CrossTenantMaster_NotFound(t *testing.T) {
 		"content": "# soul (cross-tenant attempt)",
 	})
 
-	m.handleFilesSet(guardCtx(client, "system"), client, req)
+	m.handleFilesSet(guardCtx(client), client, req)
 
 	if stub.setFileRecorded() != 0 {
 		t.Fatalf("SetAgentContextFile called %d times, want 0 (cross-tenant lookup must not mutate)", stub.setFileRecorded())

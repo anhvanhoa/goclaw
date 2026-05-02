@@ -181,7 +181,7 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 			return
 		}
 
-		if msg := m.authorizePredefinedAgentEdit(ctx, ag, protocol.MethodAgentsFileSet, params.Name); msg != "" {
+		if msg := m.authorizePredefinedAgentEdit(ctx, ag, client.UserID(), protocol.MethodAgentsFileSet, params.Name); msg != "" {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, msg))
 			return
 		}

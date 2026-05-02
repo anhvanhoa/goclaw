@@ -25,7 +25,7 @@ func TestAgentsUpdate_MasterCanUpdatePredefined_OtherUserAgent(t *testing.T) {
 		"name":    "Renamed Agent",
 	})
 
-	m.handleUpdate(guardCtx(client, "system"), client, req)
+	m.handleUpdate(guardCtx(client), client, req)
 
 	if stub.updateRecorded() != 1 {
 		t.Fatalf("Update called %d times, want 1", stub.updateRecorded())
@@ -57,7 +57,7 @@ func TestAgentsUpdate_OwnerCanUpdateOwnPredefined(t *testing.T) {
 		"model":   "claude-opus-4-1",
 	})
 
-	m.handleUpdate(guardCtx(client, "alice"), client, req)
+	m.handleUpdate(guardCtx(client), client, req)
 
 	if stub.updateRecorded() != 1 {
 		t.Fatalf("Update called %d times, want 1", stub.updateRecorded())
@@ -81,7 +81,7 @@ func TestAgentsUpdate_NonOwnerNonMaster_Rejected(t *testing.T) {
 		"name":    "Hijacked",
 	})
 
-	m.handleUpdate(guardCtx(client, "bob"), client, req)
+	m.handleUpdate(guardCtx(client), client, req)
 
 	if stub.updateRecorded() != 0 {
 		t.Fatalf("Update called %d times, want 0 (rejected request must not mutate)", stub.updateRecorded())
@@ -103,7 +103,7 @@ func TestAgentsUpdate_CrossTenantMaster_NotFound(t *testing.T) {
 		"name":    "Cross Tenant Attempt",
 	})
 
-	m.handleUpdate(guardCtx(client, "system"), client, req)
+	m.handleUpdate(guardCtx(client), client, req)
 
 	if stub.updateRecorded() != 0 {
 		t.Fatalf("Update called %d times, want 0 (cross-tenant lookup must not mutate)", stub.updateRecorded())

@@ -39,12 +39,18 @@ func (m *AgentsMethods) isOwnerUser(userID string) bool {
 
 // authorizePredefinedAgentEdit returns "" if the caller may edit ag, or a
 // localized error message. Open agents bypass the guard.
-func (m *AgentsMethods) authorizePredefinedAgentEdit(ctx context.Context, ag *store.AgentData, method, file string) string {
+//
+// userID must come from the WS client (client.UserID()), not ctx — the WS
+// dispatcher injects locale/tenant/role into ctx but not userID, so reading
+// it from ctx here would always return "" and reject the agent's own owner.
+func (m *AgentsMethods) authorizePredefinedAgentEdit(ctx context.Context, ag *store.AgentData, userID, method, file string) string {
 	if ag.AgentType != store.AgentTypePredefined {
 		return ""
 	}
-	userID := store.UserIDFromContext(ctx)
-	isAgentOwner := ag.OwnerID == userID
+	isAgentOwner := userID != "" && ag.OwnerID == userID
+	// Defense-in-depth: IsMasterScope already covers role==owner + master tenant,
+	// but isOwnerUser also catches userIDs in cfg.Gateway.OwnerIDs whose context
+	// role hasn't been promoted (e.g. legacy paths that skip role enrichment).
 	isMaster := store.IsMasterScope(ctx) || m.isOwnerUser(userID)
 	if !isAgentOwner && !isMaster {
 		locale := store.LocaleFromContext(ctx)
@@ -54,7 +60,9 @@ func (m *AgentsMethods) authorizePredefinedAgentEdit(ctx context.Context, ag *st
 		attrs := []any{
 			"method", method,
 			"agent_id", ag.ID.String(),
-			"user_id", userID,
+		}
+		if userID != "" {
+			attrs = append(attrs, "user_id", userID)
 		}
 		if file != "" {
 			attrs = append(attrs, "file", file)
