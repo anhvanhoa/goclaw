@@ -3,6 +3,7 @@ package oa
 import (
 	"context"
 	"log/slog"
+	"math/rand/v2"
 	"sync"
 	"time"
 )
@@ -11,7 +12,11 @@ const (
 	reactionDebounceMs = 700 * time.Millisecond
 	// Late stale events within this window hit the terminal rc and short-circuit
 	// instead of LoadOrStore-ing a fresh controller that would stomp the heart.
-	reactionTombstoneTTL = 60 * time.Second
+	reactionTombstoneTTL          = 60 * time.Second
+	defaultReactionTerminalMinMs  = 800 * time.Millisecond
+	defaultReactionTerminalMaxMs  = 2000 * time.Millisecond
+	reactionLengthBonusPerCharMs  = 1 * time.Millisecond
+	reactionLengthBonusCap        = 1500 * time.Millisecond
 )
 
 // Tone tuned for OA's B2C surface: one "received, working" ack on the
@@ -73,9 +78,22 @@ func (rc *zaloReactionController) SetStatus(ctx context.Context, status string) 
 	if status == "done" || status == "error" {
 		rc.terminal = true
 		rc.cancelDebounceLocked()
-		if icon := resolveReactionEmoji(status); icon != "" {
-			rc.applyReactionLocked(ctx, icon)
+		icon := resolveReactionEmoji(status)
+		if icon == "" {
+			return
 		}
+		select {
+		case <-rc.ch.stopCh:
+			return
+		default:
+		}
+		rc.ch.reactionWG.Add(1)
+		rc.debounceTimer = time.AfterFunc(rc.ch.terminalReactionDelay(rc.userID), func() {
+			defer rc.ch.reactionWG.Done()
+			rc.mu.Lock()
+			defer rc.mu.Unlock()
+			rc.applyReactionLocked(rc.ch.reactionCtx, icon)
+		})
 		return
 	}
 
@@ -136,6 +154,41 @@ func (rc *zaloReactionController) applyReactionLocked(ctx context.Context, icon 
 		return
 	}
 	rc.currentIcon = icon
+}
+
+func (c *Channel) terminalReactionDelay(chatID string) time.Duration {
+	minD := defaultReactionTerminalMinMs
+	maxD := defaultReactionTerminalMaxMs
+	if c.cfg.ReactionTerminalDelayMinMs > 0 {
+		minD = time.Duration(c.cfg.ReactionTerminalDelayMinMs) * time.Millisecond
+	}
+	if c.cfg.ReactionTerminalDelayMaxMs > 0 {
+		maxD = time.Duration(c.cfg.ReactionTerminalDelayMaxMs) * time.Millisecond
+	}
+	if maxD < minD {
+		maxD = minD
+	}
+	d := minD
+	if maxD > minD {
+		d += time.Duration(rand.Int64N(int64(maxD-minD) + 1))
+	}
+	if v, ok := c.lastReplyChars.Load(chatID); ok {
+		if n, ok := v.(int); ok && n > 0 {
+			bonus := time.Duration(n) * reactionLengthBonusPerCharMs
+			if bonus > reactionLengthBonusCap {
+				bonus = reactionLengthBonusCap
+			}
+			d += bonus
+		}
+	}
+	return d
+}
+
+func (c *Channel) recordReplyLen(chatID string, n int) {
+	if chatID == "" || n <= 0 {
+		return
+	}
+	c.lastReplyChars.Store(chatID, n)
 }
 
 // chatID for Zalo OA is the user_id (1:1 DM), so it doubles as recipient.

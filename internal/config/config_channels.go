@@ -170,6 +170,11 @@ type ZaloOAConfig struct {
 	DMPolicy             string              `json:"dm_policy,omitempty"`
 	BlockReply           *bool               `json:"block_reply,omitempty"`
 	ReactionLevel        string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — status emoji reactions
+	// Terminal reaction (done/error) is deferred by a random delay in
+	// [min, max] ms so the heart/sad doesn't slap right as the reply lands.
+	// Both 0 → defaults (800/2000). max < min → max coerced to min (no jitter).
+	ReactionTerminalDelayMinMs int                 `json:"reaction_terminal_delay_min_ms,omitempty"`
+	ReactionTerminalDelayMaxMs int                 `json:"reaction_terminal_delay_max_ms,omitempty"`
 	QuoteUserMessage     *bool               `json:"quote_user_message,omitempty"` // default false: quote the user's last inbound message in CS replies
 
 	Transport                  string `json:"transport,omitempty"`                     // "polling" (default) | "webhook"

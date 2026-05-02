@@ -89,6 +89,8 @@ func newReactionChannel(t *testing.T, level string) (*Channel, *reactionTestServ
 	refresh, _ := newRefreshServer(t, "")
 	c := newSendChannel(t, rts.srv, refresh, &fakeStore{})
 	c.cfg.ReactionLevel = level
+	c.cfg.ReactionTerminalDelayMinMs = 1
+	c.cfg.ReactionTerminalDelayMaxMs = 1
 	return c, rts
 }
 
@@ -196,11 +198,11 @@ func TestOnReactionEvent_EmptyIDsShortCircuit(t *testing.T) {
 
 // --- controller behavior ---
 
-func TestController_TerminalImmediate(t *testing.T) {
+func TestController_TerminalDeferred(t *testing.T) {
 	t.Parallel()
 	c, rts := newReactionChannel(t, "full")
 	_ = c.OnReactionEvent(context.Background(), "u", "m", "done")
-	r := rts.waitForRequest(t, 250*time.Millisecond)
+	r := rts.waitForRequest(t, 500*time.Millisecond)
 	if r.path != pathSendReaction {
 		t.Errorf("path = %q", r.path)
 	}
@@ -208,6 +210,35 @@ func TestController_TerminalImmediate(t *testing.T) {
 	sa, _ := body["sender_action"].(map[string]any)
 	if sa["react_message_id"] != "m" {
 		t.Errorf("react_message_id = %v", sa["react_message_id"])
+	}
+}
+
+func TestController_TerminalRespectsDelay(t *testing.T) {
+	t.Parallel()
+	c, rts := newReactionChannel(t, "full")
+	c.cfg.ReactionTerminalDelayMinMs = 250
+	c.cfg.ReactionTerminalDelayMaxMs = 250
+	start := time.Now()
+	_ = c.OnReactionEvent(context.Background(), "u", "m", "done")
+	rts.requireNoRequest(t, 150*time.Millisecond)
+	rts.waitForRequest(t, 500*time.Millisecond)
+	if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
+		t.Errorf("terminal fired in %v, want >= ~250ms", elapsed)
+	}
+}
+
+func TestController_TerminalCancelledOnStop(t *testing.T) {
+	t.Parallel()
+	c, rts := newReactionChannel(t, "full")
+	c.cfg.ReactionTerminalDelayMinMs = 500
+	c.cfg.ReactionTerminalDelayMaxMs = 500
+	_ = c.OnReactionEvent(context.Background(), "u", "m", "done")
+	if err := c.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	rts.requireNoRequest(t, 800*time.Millisecond)
+	if got := rts.count.Load(); got != 0 {
+		t.Errorf("got %d requests after Stop, want 0", got)
 	}
 }
 

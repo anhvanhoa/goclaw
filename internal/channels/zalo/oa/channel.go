@@ -71,6 +71,7 @@ type Channel struct {
 	reactionWG      sync.WaitGroup
 	reactionCtx     context.Context
 	reactionCancel  context.CancelFunc
+	lastReplyChars  sync.Map // key: chatID → int (latest reply char count, used to scale terminal-reaction delay)
 
 	// downloadMediaFn lets tests inject a fixture writer that bypasses SSRF
 	// on httptest loopback URLs. nil → downloadOAMedia.
@@ -260,6 +261,9 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	quoteID := msg.Metadata["reply_to_message_id"]
 	if len(msg.Media) == 0 {
 		_, err := c.SendText(ctx, msg.ChatID, msg.Content, quoteID)
+		if err == nil {
+			c.recordReplyLen(msg.ChatID, len(msg.Content))
+		}
 		return err
 	}
 	if len(msg.Media) > 1 {
@@ -329,6 +333,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			"attachment_message_id", attachMID, "error", terr)
 		return fmt.Errorf("%w: %v", ErrPartialSend, terr)
 	}
+	c.recordReplyLen(msg.ChatID, len(trailing))
 	return nil
 }
 
