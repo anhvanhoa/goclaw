@@ -23,8 +23,15 @@ const ENV_DENYLIST_EXACT = new Set([
   "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP",
   "GIT_SSH_COMMAND", "GIT_SSH", "GIT_EXEC_PATH", "GIT_CONFIG_SYSTEM",
   "SSH_AUTH_SOCK",
+  // Finding #6 additions — keep in sync with internal/crypto/env_denylist.go
+  "BASH_ENV", "ENV", "PROMPT_COMMAND",
+  "PERL5LIB", "RUBYOPT",
+  "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",
+  "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE",
+  "IFS",
 ]);
-const ENV_DENYLIST_PREFIXES = ["DYLD_", "GOCLAW_", "LD_"];
+// Keep in sync with deniedPrefixes in internal/crypto/env_denylist.go.
+const ENV_DENYLIST_PREFIXES = ["DYLD_", "GOCLAW_", "LD_", "NPM_CONFIG_"];
 
 export interface GrantEnvEntry {
   key: string;
