@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
-	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -173,4 +173,12 @@ func grantUserAccess(t *testing.T, db *sql.DB, tenantID, serverID uuid.UUID, use
 
 func containsGrantRevoked(s string) bool {
 	return len(s) > 0 && (strings.Contains(s, "grant revoked") || strings.Contains(s, "grant denied"))
+}
+
+// fakeMCPClient is a stub for testing. Since mcpclient.Client is a struct
+// and not an interface, we cannot directly mock it. The test relies on
+// the clientPtr being nil or the connection being marked as disconnected.
+type fakeMCPClient struct {
+	result *mcpgo.CallToolResult
+	err    error
 }
