@@ -82,13 +82,21 @@ export function CliCredentialsPanel() {
       ) : items.length === 0 ? (
         <EmptyState icon={KeyRound} title={t("emptyTitle")} description={t("emptyDescription")} />
       ) : (
-        <CliCredentialsTable
-          items={items}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
-          onUserCreds={setUserCredsTarget}
-          onGrants={setGrantsTarget}
-        />
+        <>
+          <CliCredentialsTable
+            items={items}
+            onEdit={openEdit}
+            onDelete={setDeleteTarget}
+            onUserCreds={setUserCredsTarget}
+            onGrants={setGrantsTarget}
+          />
+          {/* Finding #12: surface LIMIT 20 truncation so admins know there are more entries. */}
+          {items.length >= 20 && (
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              {t("list.truncated")}
+            </p>
+          )}
+        </>
       )}
 
       <Suspense fallback={null}>
