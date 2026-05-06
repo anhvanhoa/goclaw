@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -179,8 +180,21 @@ func (s *PGSecureCLIAgentGrantStore) scanRows(rows *sql.Rows) ([]store.SecureCLI
 			continue
 		}
 		s.applyNullable(&g, denyArgs, denyVerbose, timeout, tips)
-		// Decrypt silently skipped on error to not break list operations.
-		_ = s.decryptEnv(&g, encEnv)
+		// Finding #4: Log decrypt failures instead of silently masking them.
+		// A corrupted row appears with EncryptedEnv==nil (env_set: false), which
+		// could hide a key-rotation incident or DB tamper. Surface it via Error log
+		// so ops can detect it. The row is still included in the result so list
+		// doesn't break, but the decrypt failure is visible.
+		if err := s.decryptEnv(&g, encEnv); err != nil {
+			slog.Error("security.grant.decrypt_failed",
+				"grant_id", g.ID,
+				"binary_id", g.BinaryID,
+				"err", err,
+			)
+			// EncryptedEnv stays nil — populateGrantEnvFields will set env_set=false,
+			// which is misleading but acceptable in list view. Callers should inspect
+			// logs when admin sees env_set=false on a grant they know has env set.
+		}
 		result = append(result, g)
 	}
 	return result, nil

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"fmt"
 	"time"
 
@@ -189,8 +190,15 @@ func (s *SQLiteSecureCLIAgentGrantStore) scanRows(rows *sql.Rows) ([]store.Secur
 		applyGrantNullable(&g, denyArgs, denyVerbose, timeout, tips)
 		g.CreatedAt = createdAt.Time
 		g.UpdatedAt = updatedAt.Time
-		// Decrypt silently skipped on error to not break list operations.
-		_ = s.decryptGrantEnv(&g, encEnv)
+		// Finding #4: Log decrypt failures instead of silently masking them.
+		// Consistent with PG implementation — error is logged but row is still returned.
+		if err := s.decryptGrantEnv(&g, encEnv); err != nil {
+			slog.Error("security.grant.decrypt_failed",
+				"grant_id", g.ID,
+				"binary_id", g.BinaryID,
+				"err", err,
+			)
+		}
 		result = append(result, g)
 	}
 	return result, rows.Err()
