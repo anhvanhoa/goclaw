@@ -48,7 +48,11 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
     return map;
   }, [agents]);
 
-  useEffect(() => { if (open) clearForm(); }, [open]);
+  // Finding #11: clear form on both open AND close.
+  // Original code only cleared on open (true→?), leaving plaintext env values
+  // in state when dialog closes. Now: open=true → clearForm (fresh start);
+  // open=false → clearForm (wipe any revealed plaintext before next session).
+  useEffect(() => { clearForm(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearForm = () => {
     setAgentId(""); setDenyArgs(""); setDenyVerbose(""); setTimeout(""); setTips("");
