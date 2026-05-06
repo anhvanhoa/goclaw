@@ -205,13 +205,27 @@ func (h *SecureCLIGrantHandler) handleCreate(w http.ResponseWriter, r *http.Requ
 	if len(req.EnvVars) > 0 {
 		envJSON, ok := validateAndSerializeEnvVars(w, locale, req.EnvVars)
 		if !ok {
-			// Grant was created but env failed; clean it up to avoid orphan row.
-			_ = h.grants.Delete(r.Context(), g.ID)
+			// Grant was created but env validation failed; clean it up to avoid orphan row.
+			// Finding #13: log rollback-delete failures for ops visibility.
+			if delErr := h.grants.Delete(r.Context(), g.ID); delErr != nil {
+				slog.Error("secure_cli_grants.create.rollback_delete",
+					"grant_id", g.ID,
+					"err", delErr,
+					"note", "orphan grant row may exist after env validation failure",
+				)
+			}
 			return
 		}
 		if err := h.grants.UpdateGrantEnv(r.Context(), g.ID, envJSON); err != nil {
 			slog.Error("secure_cli_grants.create.set_env", "grant_id", g.ID, "error", err)
-			_ = h.grants.Delete(r.Context(), g.ID)
+			// Finding #13: log rollback-delete failures for ops visibility.
+			if delErr := h.grants.Delete(r.Context(), g.ID); delErr != nil {
+				slog.Error("secure_cli_grants.create.rollback_delete",
+					"grant_id", g.ID,
+					"err", delErr,
+					"note", "orphan grant row may exist after env persist failure",
+				)
+			}
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "persist grant env")})
 			return
 		}
