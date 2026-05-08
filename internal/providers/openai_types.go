@@ -54,7 +54,8 @@ type openAIUsage struct {
 }
 
 type openAIPromptDetails struct {
-	CachedTokens int `json:"cached_tokens"`
+	CachedTokens             int `json:"cached_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 type openAICompletionDetails struct {

@@ -111,6 +111,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
 				result.Usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				result.Usage.CacheCreationTokens = chunk.Usage.PromptTokensDetails.CacheCreationInputTokens
 			}
 			if chunk.Usage.CompletionTokensDetails != nil && chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
 				result.Usage.ThinkingTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens

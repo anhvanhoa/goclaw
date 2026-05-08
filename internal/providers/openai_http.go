@@ -126,6 +126,7 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 		}
 		if resp.Usage.PromptTokensDetails != nil {
 			result.Usage.CacheReadTokens = resp.Usage.PromptTokensDetails.CachedTokens
+			result.Usage.CacheCreationTokens = resp.Usage.PromptTokensDetails.CacheCreationInputTokens
 		}
 		if resp.Usage.CompletionTokensDetails != nil && resp.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
 			result.Usage.ThinkingTokens = resp.Usage.CompletionTokensDetails.ReasoningTokens
