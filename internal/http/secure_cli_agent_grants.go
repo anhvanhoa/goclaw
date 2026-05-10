@@ -374,10 +374,12 @@ func (h *SecureCLIGrantHandler) handleRevealEnv(w http.ResponseWriter, r *http.R
 	}
 	ctx := r.Context()
 
-	// Reject master-scope contexts: reveal is per-tenant by definition.
-	// A master-scope context would bypass the tenant_id SQL filter in store.Get,
-	// potentially leaking env vars across tenant boundaries.
-	if store.IsMasterScope(ctx) {
+	// Reject contexts where the tenant_id SQL filter in store.Get would not bind
+	// to a real tenant — that would leak env vars across tenant boundaries.
+	// We check tenant_id directly (not store.IsMasterScope) because the shared
+	// IsMasterScope predicate also returns true for owner role with an explicit
+	// tenant_id, which is a legitimate caller here (the SQL filter still binds).
+	if tid := store.TenantIDFromContext(ctx); tid == uuid.Nil || tid == store.MasterTenantID {
 		locale := store.LocaleFromContext(ctx)
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": i18n.T(locale, i18n.MsgPermissionDenied, "reveal env (master scope not allowed)"),
