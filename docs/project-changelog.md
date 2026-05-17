@@ -29,6 +29,11 @@ Significant changes, features, and fixes in reverse chronological order.
 - Added `goclaw-backup-r2.timer` to dump PostgreSQL every 6 hours, upload to private Cloudflare R2 storage, and retain the latest 20 backups.
 - Added deployment runbook in `docs/deployment-guide.md`.
 
+**Features**
+
+- Added a protected gateway upgrade HTTP API that triggers the fixed host-local upgrade script asynchronously.
+- Added `scripts/goclaw-upgrade-release.sh` and installed the VPS copy at `/usr/local/bin/goclaw-upgrade-release`; dry-run verifies the latest stable server release asset and checksum before deploy.
+
 ---
 
 ### CI/CD: dev branch beta automation

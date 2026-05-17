@@ -50,6 +50,7 @@ export GOCLAW_DOMAIN=<public-domain>
 | `/usr/local/bin/goclaw-deploy` | Release switch, upgrade, health-check, rollback |
 | `/usr/local/bin/goclaw-issue-ssl` | Certbot wrapper for the deployment domain |
 | `/usr/local/bin/goclaw-backup-r2` | Postgres dump, R2 upload, retention cleanup |
+| `/usr/local/bin/goclaw-upgrade-release` | Download and deploy a GitHub Release tarball |
 
 Secrets are stored only in server env files. Do not copy tokens or database passwords into repo docs.
 
@@ -121,6 +122,42 @@ sudo /usr/local/bin/goclaw-issue-ssl
 ```
 
 ## Deploy A New Release
+
+Preferred server-side upgrade flow:
+
+```bash
+sudo /usr/local/bin/goclaw-upgrade-release --dry-run latest
+sudo /usr/local/bin/goclaw-upgrade-release latest
+sudo /usr/local/bin/goclaw-upgrade-release v3.12.0
+```
+
+The script downloads the Linux amd64 GitHub Release tarball from `digitopvn/goclaw`, follows GitHub release redirects, verifies `CHECKSUMS.sha256`, extracts to `/opt/goclaw/releases/<tag>`, and calls `goclaw-deploy`.
+
+The HTTP API still accepts only `tag`; it does not accept repo names or custom download URLs.
+
+Remote API trigger is available in builds that include the gateway upgrade endpoint:
+
+```bash
+curl -fsS -X POST "https://$GOCLAW_DOMAIN/v1/system/gateway/upgrade" \
+  -H "Authorization: Bearer <gateway-token>" \
+  -H "X-GoClaw-Upgrade-Token: <upgrade-token>" \
+  -H "Content-Type: application/json" \
+  --data '{"tag":"latest"}'
+```
+
+Check status:
+
+```bash
+curl -fsS "https://$GOCLAW_DOMAIN/v1/system/gateway/upgrade/status" \
+  -H "Authorization: Bearer <gateway-token>" \
+  -H "X-GoClaw-Upgrade-Token: <upgrade-token>"
+```
+
+Keep upgrade tokens in server env files or secret managers. Do not put real tokens in docs.
+
+The remote trigger endpoint fails closed unless `GOCLAW_UPGRADE_TRIGGER_TOKEN` is configured in the gateway environment.
+
+Manual local-build fallback:
 
 Build locally with embedded web UI:
 
