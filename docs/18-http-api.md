@@ -344,6 +344,7 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | `GET` | `/v1/providers/{id}` | Get provider |
 | `PUT` | `/v1/providers/{id}` | Update provider |
 | `DELETE` | `/v1/providers/{id}` | Delete provider |
+| `POST` | `/v1/providers/{id}/reconnect` | Reload provider runtime from stored config |
 
 ### Provider Verification & Models
 
@@ -357,6 +358,25 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | `GET` | `/v1/providers/claude-cli/auth-status` | Check Claude CLI login status |
 
 **Supported types:** `anthropic_native`, `openai_compat`, `chatgpt_oauth`, `gemini_native`, `dashscope`, `bailian`, `minimax`, `claude_cli`, `acp`
+
+Reconnect response:
+
+```json
+{
+  "status": "reconnected",
+  "provider": {
+    "id": "0193a5b0-7000-7000-8000-000000000123",
+    "name": "openrouter-main",
+    "provider_type": "openai_compat",
+    "api_key": "***",
+    "enabled": true
+  },
+  "registry_updated": true,
+  "cache_invalidated": true
+}
+```
+
+`status` is `reconnected`, `disabled`, or `not_registered`. Reconnect never changes stored provider config. It does not run an upstream verify call; call `/v1/providers/{id}/verify` after reconnect when that check is needed.
 
 Example response:
 
@@ -1148,10 +1168,25 @@ LLM call tracing and cost analysis.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/traces` | List traces (paginated, filterable) |
+| `GET` | `/v1/traces/follow` | Poll trace changes for one session or agent |
 | `GET` | `/v1/traces/{traceID}` | Get trace with spans |
 | `GET` | `/v1/traces/{traceID}/export` | Export trace tree (gzipped JSON) |
 
 **Filters:** `agent_id`, `user_id`, `session_key`, `status`, `channel`
+
+`GET /v1/traces/follow` requires `session_key` or `agent_id`. Query params: `session_key`, `agent_id`, `status`, `channel`, `since` (RFC 3339), `limit` (default 50, max 200), `include_spans` (default false). Non-admin callers only see their own traces. When `since` is provided, the server returns traces matching existing filters and `(created_at > since OR end_time > since OR status = "running")`.
+
+Follow response:
+
+```json
+{
+  "traces": [],
+  "spans_by_trace_id": {},
+  "server_time": "2026-05-20T11:23:00Z",
+  "next_since": "2026-05-20T11:23:00Z",
+  "limit": 50
+}
+```
 
 ### Costs
 

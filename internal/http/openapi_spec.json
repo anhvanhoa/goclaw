@@ -482,6 +482,52 @@
         "responses": { "200": { "description": "Provider deleted" } }
       }
     },
+    "/v1/providers/{id}/reconnect": {
+      "post": {
+        "tags": ["Providers"],
+        "summary": "Reconnect provider runtime",
+        "description": "Reload an existing provider from stored config into the runtime registry. Does not mutate stored config and does not call upstream verification.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "verify": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Only false is supported. Call /v1/providers/{id}/verify separately for upstream verification."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider reconnect result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["reconnected", "disabled", "not_registered"] },
+                    "provider": { "$ref": "#/components/schemas/ProviderInput" },
+                    "registry_updated": { "type": "boolean" },
+                    "cache_invalidated": { "type": "boolean" }
+                  },
+                  "required": ["status", "provider", "registry_updated", "cache_invalidated"]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/v1/providers/{id}/models": {
       "get": {
         "tags": ["Providers"],
@@ -762,6 +808,43 @@
           { "name": "agent_id", "in": "query", "schema": { "type": "string" } }
         ],
         "responses": { "200": { "description": "Trace list" } }
+      }
+    },
+    "/v1/traces/follow": {
+      "get": {
+        "tags": ["Traces"],
+        "summary": "Poll trace changes",
+        "description": "Stateless polling endpoint for traces in one session or one agent. Requires session_key or agent_id.",
+        "parameters": [
+          { "name": "session_key", "in": "query", "schema": { "type": "string" } },
+          { "name": "agent_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "channel", "in": "query", "schema": { "type": "string" } },
+          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },
+          { "name": "include_spans", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trace follow page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "traces": { "type": "array", "items": { "type": "object" } },
+                    "spans_by_trace_id": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "object" } } },
+                    "server_time": { "type": "string", "format": "date-time" },
+                    "next_since": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer" }
+                  },
+                  "required": ["traces", "spans_by_trace_id", "server_time", "next_since", "limit"]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       }
     },
     "/v1/traces/{traceID}": {
