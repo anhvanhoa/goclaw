@@ -22,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -39,6 +40,7 @@ type ProvidersHandler struct {
 	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
 	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
 	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
+	usageCaps       *usagecaps.Service
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -83,6 +85,10 @@ func (h *ProvidersHandler) SetAgentStore(as store.AgentCRUDStore) {
 // for model alias resolution and token counting. Must be called before serving requests.
 func (h *ProvidersHandler) SetModelRegistry(r providers.ModelRegistry) {
 	h.modelReg = r
+}
+
+func (h *ProvidersHandler) SetUsageCapService(s *usagecaps.Service) {
+	h.usageCaps = s
 }
 
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.

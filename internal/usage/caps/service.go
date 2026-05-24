@@ -66,6 +66,7 @@ func (s *Service) Preflight(ctx context.Context, req Request) (*Reservation, err
 	if s == nil || s.store == nil {
 		return skippedReservation(req, "service_disabled"), nil
 	}
+	ctx = scopedRequestContext(ctx, req)
 	providerData, err := s.resolveProvider(ctx, req.TenantID, req.ProviderName)
 	if err != nil {
 		return skippedReservation(req, "provider_metadata_missing"), nil
@@ -107,6 +108,12 @@ func (s *Service) Preflight(ctx context.Context, req Request) (*Reservation, err
 		resolved, err := s.store.ResolvePricing(ctx, req.TenantID, providerData.ID, providerData.Name, providerData.ProviderType, req.ModelID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
+				_ = s.store.InsertUsageCapEvent(ctx, &store.UsageCapEvent{
+					TenantID:       req.TenantID,
+					ReservationKey: key, Decision: store.UsageCapEventBlock, Reason: "pricing_unknown",
+					EstimatedTokens: usage.TotalTokens(), EstimatedCostMicros: 0,
+					Metadata: mustJSON(map[string]any{"model_id": req.ModelID, "provider": req.ProviderName}),
+				})
 				return blockedReservation(req, scope, key, usage, 0, uuid.Nil, "pricing_unknown"), fmt.Errorf("%w: %s", ErrPricingUnknown, req.ModelID)
 			}
 			return nil, err

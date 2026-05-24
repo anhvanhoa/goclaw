@@ -267,9 +267,16 @@ func (s *PGUsageCapStore) ListUsageCapUtilization(ctx context.Context, tenantID 
 	for _, p := range policies {
 		start, end := usageWindow(time.Now().UTC(), p.Window)
 		u := store.UsageCapUtilization{Policy: p, WindowStart: start, WindowEnd: end}
-		_ = s.db.QueryRowContext(ctx, `
+		err := s.db.QueryRowContext(ctx, `
 SELECT used_tokens, reserved_tokens, used_cost_micros, reserved_cost_micros
 FROM usage_cap_counters WHERE policy_id=$1 AND window_start=$2`, p.ID, start).Scan(&u.UsedTokens, &u.ReservedTokens, &u.UsedCostMicros, &u.ReservedCostMicros)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				out = append(out, u)
+				continue
+			}
+			return nil, err
+		}
 		out = append(out, u)
 	}
 	return out, nil

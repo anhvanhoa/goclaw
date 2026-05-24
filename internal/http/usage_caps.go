@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
@@ -64,11 +65,15 @@ func (h *UsageCapsHandler) masterAuth(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+func writeUsageCapError(w http.ResponseWriter, r *http.Request, status int, key string, args ...any) {
+	writeJSON(w, status, map[string]string{"error": i18n.T(store.LocaleFromContext(r.Context()), key, args...)})
+}
+
 func (h *UsageCapsHandler) handleListPolicies(w http.ResponseWriter, r *http.Request) {
 	scope := store.UsageCapScope{TenantID: tenantIDOrMaster(r)}
 	policies, err := h.store.ListUsageCapPolicies(r.Context(), scope, true)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list policies failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsageCapsListPoliciesFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"policies": policies})
@@ -77,17 +82,17 @@ func (h *UsageCapsHandler) handleListPolicies(w http.ResponseWriter, r *http.Req
 func (h *UsageCapsHandler) handleCreatePolicy(w http.ResponseWriter, r *http.Request) {
 	var body policyBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidJSON)
 		return
 	}
 	p, err := body.toPolicy(tenantIDOrMaster(r))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidRequest, err.Error())
 		return
 	}
 	if err := h.store.CreateUsageCapPolicy(r.Context(), &p); err != nil {
 		slog.Warn("usage_caps.create_policy_failed", "error", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "usage cap policy validation failed"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgUsageCapPolicyValidationFailed)
 		return
 	}
 	writeJSON(w, http.StatusCreated, p)
@@ -96,27 +101,27 @@ func (h *UsageCapsHandler) handleCreatePolicy(w http.ResponseWriter, r *http.Req
 func (h *UsageCapsHandler) handleUpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid policy id"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidID, "policy")
 		return
 	}
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidJSON)
 		return
 	}
 	patch, err := policyPatchFromBody(bodyBytes)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidRequest, err.Error())
 		return
 	}
 	p, err := h.store.UpdateUsageCapPolicy(r.Context(), tenantIDOrMaster(r), id, patch)
 	if err != nil {
 		if errors.Is(err, store.ErrUsageCapPolicyManaged) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			writeUsageCapError(w, r, http.StatusConflict, i18n.MsgUsageCapPolicyManaged)
 			return
 		}
 		slog.Warn("usage_caps.update_policy_failed", "error", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "usage cap policy validation failed"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgUsageCapPolicyValidationFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
@@ -125,15 +130,15 @@ func (h *UsageCapsHandler) handleUpdatePolicy(w http.ResponseWriter, r *http.Req
 func (h *UsageCapsHandler) handleDeletePolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid policy id"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidID, "policy")
 		return
 	}
 	if err := h.store.DeleteUsageCapPolicy(r.Context(), tenantIDOrMaster(r), id); err != nil {
 		if errors.Is(err, store.ErrUsageCapPolicyManaged) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			writeUsageCapError(w, r, http.StatusConflict, i18n.MsgUsageCapPolicyManaged)
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsageCapsDeletePolicyFailed)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -142,7 +147,7 @@ func (h *UsageCapsHandler) handleDeletePolicy(w http.ResponseWriter, r *http.Req
 func (h *UsageCapsHandler) handleUtilization(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.store.ListUsageCapUtilization(r.Context(), tenantIDOrMaster(r))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "utilization failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsageCapsUtilizationFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
@@ -152,7 +157,7 @@ func (h *UsageCapsHandler) handleEvents(w http.ResponseWriter, r *http.Request) 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	events, err := h.store.ListUsageCapEvents(r.Context(), tenantIDOrMaster(r), limit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "events failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsageCapsEventsFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
@@ -164,12 +169,12 @@ func (h *UsageCapsHandler) handleSyncOpenRouter(w http.ResponseWriter, r *http.R
 	entries, err := pricing.FetchOpenRouterCatalog(ctx, h.client)
 	if err != nil {
 		slog.Warn("usage_pricing.openrouter_sync", "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		writeUsageCapError(w, r, http.StatusBadGateway, i18n.MsgUsagePricingSyncOpenRouterFailed, err.Error())
 		return
 	}
 	count, err := h.store.UpsertPricingCatalog(r.Context(), entries)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "store catalog failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsagePricingStoreCatalogFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"count": count})
@@ -181,7 +186,7 @@ func (h *UsageCapsHandler) handleListPricing(w http.ResponseWriter, r *http.Requ
 		Limit:   queryInt(r, "limit", 100),
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list pricing failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsagePricingListFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"models": rows})
@@ -190,12 +195,12 @@ func (h *UsageCapsHandler) handleListPricing(w http.ResponseWriter, r *http.Requ
 func (h *UsageCapsHandler) handlePutOverride(w http.ResponseWriter, r *http.Request) {
 	var body overrideBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidJSON)
 		return
 	}
 	providerID, err := uuid.Parse(body.ProviderID)
 	if err != nil || body.ModelID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "provider_id and model_id are required"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgUsagePricingProviderModelRequired)
 		return
 	}
 	o := &store.UsagePricingOverride{
@@ -205,7 +210,7 @@ func (h *UsageCapsHandler) handlePutOverride(w http.ResponseWriter, r *http.Requ
 	}
 	if err := h.store.PutPricingOverride(r.Context(), o); err != nil {
 		slog.Warn("usage_pricing.put_override_failed", "error", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "pricing override validation failed"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgUsagePricingOverrideValidationFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, o)
@@ -217,13 +222,13 @@ func (h *UsageCapsHandler) handleListOverrides(w http.ResponseWriter, r *http.Re
 		var err error
 		providerID, err = uuid.Parse(raw)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid provider_id"})
+			writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidID, "provider")
 			return
 		}
 	}
 	rows, err := h.store.ListPricingOverrides(r.Context(), store.UsagePricingQuery{TenantID: tenantIDOrMaster(r), ProviderID: providerID})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list overrides failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsagePricingListOverridesFailed)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"overrides": rows})
@@ -232,11 +237,11 @@ func (h *UsageCapsHandler) handleListOverrides(w http.ResponseWriter, r *http.Re
 func (h *UsageCapsHandler) handleDeleteOverride(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid override id"})
+		writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidID, "override")
 		return
 	}
 	if err := h.store.DeletePricingOverride(r.Context(), tenantIDOrMaster(r), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsagePricingDeleteOverrideFailed)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

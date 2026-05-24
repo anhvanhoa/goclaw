@@ -234,7 +234,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// Knowledge graph API
 	if d.pgStores != nil && d.pgStores.KnowledgeGraph != nil {
-		d.server.SetKnowledgeGraphHandler(httpapi.NewKnowledgeGraphHandler(d.pgStores.KnowledgeGraph, d.providerRegistry))
+		kgHandler := httpapi.NewKnowledgeGraphHandler(d.pgStores.KnowledgeGraph, d.providerRegistry)
+		kgHandler.SetUsageCapService(d.usageCapSvc)
+		d.server.SetKnowledgeGraphHandler(kgHandler)
 	}
 
 	// V3: Evolution metrics + suggestions API

@@ -185,7 +185,7 @@ func wireExtras(
 				"disabled_count", n, "edition", edition.Current().Name)
 		}
 
-		handlers := buildHookHandlers(stores, providerReg, appCfg.Hooks)
+		handlers := buildHookHandlers(stores, providerReg, appCfg.Hooks, usageCapSvc)
 		stdOpts := hooks.StdDispatcherOpts{
 			Store:    hs,
 			Audit:    hooks.NewAuditWriter(hs, ""),
@@ -304,7 +304,7 @@ func wireExtras(
 		writeMemIntc = tools.NewMemoryInterceptor(stores.Memory, workspace)
 		// Hook KG extraction on memory writes if KG store is available
 		if stores.KnowledgeGraph != nil && stores.BuiltinTools != nil {
-			writeMemIntc.SetKGExtractFunc(buildKGExtractFunc(stores.KnowledgeGraph, stores.BuiltinTools, providerReg))
+			writeMemIntc.SetKGExtractFunc(buildKGExtractFunc(stores.KnowledgeGraph, stores.BuiltinTools, providerReg, usageCapSvc))
 		}
 	}
 	if readTool, ok := toolsReg.Get("read_file"); ok {
@@ -712,7 +712,7 @@ type kgSettings struct {
 // buildKGExtractFunc returns a callback that extracts entities from memory content.
 // Settings are read from the builtin_tools table on each invocation (not cached),
 // so changes take effect immediately without restart.
-func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinToolStore, providerReg *providers.Registry) tools.KGExtractFunc {
+func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinToolStore, providerReg *providers.Registry, usageCapSvc *usagecaps.Service) tools.KGExtractFunc {
 	return func(ctx context.Context, agentID, userID, content string) {
 		slog.Info("kg extract: triggered", "agent", agentID, "user", userID, "content_len", len(content))
 		// Read settings from DB on each call so admin changes take effect immediately
@@ -736,6 +736,7 @@ func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinTool
 			return
 		}
 		extractor := kg.NewExtractor(p, settings.ExtractionModel, settings.MinConfidence)
+		extractor.SetUsageCapService(usageCapSvc)
 		result, err := extractor.Extract(ctx, content)
 		if err != nil {
 			slog.Warn("kg extract: extraction failed", "agent", agentID, "error", err)

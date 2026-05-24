@@ -87,6 +87,21 @@ func init() {
 		// Provider
 		MsgProviderReqFailed: "%s: request failed: %s",
 
+		// Usage caps / pricing
+		MsgUsageCapsListPoliciesFailed:          "failed to list usage cap policies",
+		MsgUsageCapPolicyValidationFailed:       "usage cap policy validation failed",
+		MsgUsageCapPolicyManaged:                "managed usage cap policies cannot be modified",
+		MsgUsageCapsDeletePolicyFailed:          "failed to delete usage cap policy",
+		MsgUsageCapsUtilizationFailed:           "failed to load usage cap utilization",
+		MsgUsageCapsEventsFailed:                "failed to load usage cap events",
+		MsgUsagePricingSyncOpenRouterFailed:     "failed to sync OpenRouter pricing: %s",
+		MsgUsagePricingStoreCatalogFailed:       "failed to store pricing catalog",
+		MsgUsagePricingListFailed:               "failed to list model pricing",
+		MsgUsagePricingProviderModelRequired:    "provider_id and model_id are required",
+		MsgUsagePricingOverrideValidationFailed: "pricing override validation failed",
+		MsgUsagePricingListOverridesFailed:      "failed to list pricing overrides",
+		MsgUsagePricingDeleteOverrideFailed:     "failed to delete pricing override",
+
 		// Unknown method
 		MsgUnknownMethod: "unknown method: %s",
 
@@ -200,10 +215,10 @@ func init() {
 		MsgTenantScopeRequired: "tenant scope is required for this operation",
 
 		// TTS / Voices
-		MsgTtsUnknownModel:       "unknown tts model: %s",
-		MsgVoicesListFailed:      "failed to list voices: %s",
-		MsgTtsGeminiInvalidVoice: "invalid Gemini voice: %s",
-		MsgTtsGeminiSpeakerLimit: "Gemini TTS supports at most 2 speakers",
+		MsgTtsUnknownModel:        "unknown tts model: %s",
+		MsgVoicesListFailed:       "failed to list voices: %s",
+		MsgTtsGeminiInvalidVoice:  "invalid Gemini voice: %s",
+		MsgTtsGeminiSpeakerLimit:  "Gemini TTS supports at most 2 speakers",
 		MsgTtsGeminiInvalidModel:  "invalid Gemini TTS model: %s",
 		MsgTtsGeminiTextOnly:      "Gemini refused to generate audio. Try simpler text without translation or commentary.",
 		MsgTtsParamOutOfRange:     "TTS param %q value %v is out of range [%v, %v]",

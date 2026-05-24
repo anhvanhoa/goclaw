@@ -89,7 +89,7 @@ func TestPreflightIncludesRequestPricingWhenConfigured(t *testing.T) {
 		Name:         "openrouter",
 		ProviderType: store.ProviderOpenRouter,
 		APIKey:       "sk-test",
-	}}
+	}, requireTenant: policy.TenantID}
 	svc := NewService(usageStore, providerStore)
 
 	_, err := svc.Preflight(context.Background(), Request{
@@ -279,6 +279,79 @@ func TestPreflightTraceMetadataForCapExceeded(t *testing.T) {
 	}
 }
 
+func TestPreflightRecordsPricingUnknownBlockEvent(t *testing.T) {
+	policy := store.UsageCapPolicy{ID: uuid.New(), TenantID: uuid.New(), MaxCostMicros: int64Ptr(1000), Enabled: true}
+	usageStore := &fakeUsageCapStore{
+		policies:   []store.UsageCapPolicy{policy},
+		resolveErr: sql.ErrNoRows,
+	}
+	providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openrouter",
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-test",
+	}}
+	svc := NewService(usageStore, providerStore)
+
+	reservation, err := svc.Preflight(context.Background(), Request{
+		TenantID: policy.TenantID, ProviderName: "openrouter", ModelID: "missing/model",
+		ReservationKey: "pricing-missing", Messages: []providers.Message{{Role: "user", Content: "hello"}},
+		MaxOutputTokens: 10,
+	})
+	if !errors.Is(err, ErrPricingUnknown) {
+		t.Fatalf("Preflight error = %v, want ErrPricingUnknown", err)
+	}
+	if reservation == nil {
+		t.Fatal("Preflight returned nil reservation")
+	}
+	metadata := reservation.TraceMetadata()
+	if metadata.Reason != "pricing_unknown" {
+		t.Fatalf("reservation metadata = %+v, want pricing_unknown", metadata)
+	}
+	if len(usageStore.events) != 1 {
+		t.Fatalf("events = %d, want 1", len(usageStore.events))
+	}
+	event := usageStore.events[0]
+	if event.Decision != store.UsageCapEventBlock || event.Reason != "pricing_unknown" {
+		t.Fatalf("event decision/reason = %q/%q, want block/pricing_unknown", event.Decision, event.Reason)
+	}
+	if event.ReservationKey != "pricing-missing" {
+		t.Fatalf("event reservation_key = %q, want pricing-missing", event.ReservationKey)
+	}
+}
+
+func TestServiceChatBlocksBeforeProviderCall(t *testing.T) {
+	policy := store.UsageCapPolicy{ID: uuid.New(), TenantID: uuid.New(), MaxTokens: int64Ptr(10), Enabled: true}
+	usageStore := &fakeUsageCapStore{
+		policies:   []store.UsageCapPolicy{policy},
+		reserveErr: &store.UsageCapExceededError{PolicyID: policy.ID, Reason: "token_cap_exceeded"},
+	}
+	providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openrouter",
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-test",
+	}, requireTenant: policy.TenantID}
+	svc := NewService(usageStore, providerStore)
+	provider := &fakeChatProvider{name: "openrouter", model: "token/model"}
+
+	_, err := svc.Chat(context.Background(), provider, providers.ChatRequest{
+		Messages: []providers.Message{{Role: "user", Content: "hello"}},
+		Model:    "token/model",
+		Options:  map[string]any{providers.OptMaxTokens: 20},
+	}, ChatOptions{
+		TenantID:     policy.TenantID,
+		ProviderName: "openrouter",
+		Purpose:      "test-block",
+	})
+	if !errors.Is(err, ErrCapExceeded) {
+		t.Fatalf("Chat error = %v, want ErrCapExceeded", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("provider calls = %d, want 0", provider.calls)
+	}
+}
+
 func TestMergeTraceMetadataPreservesExistingSections(t *testing.T) {
 	existing := json.RawMessage(`{"thinking":{"effort":"high"}}`)
 	merged := MergeTraceMetadata(existing, []TraceMetadata{{
@@ -319,6 +392,32 @@ func TestCountImagesOnlyCountsImageMIMEs(t *testing.T) {
 	}
 }
 
+type fakeChatProvider struct {
+	name  string
+	model string
+	calls int
+	resp  *providers.ChatResponse
+	err   error
+}
+
+func (p *fakeChatProvider) Chat(context.Context, providers.ChatRequest) (*providers.ChatResponse, error) {
+	p.calls++
+	if p.resp != nil || p.err != nil {
+		return p.resp, p.err
+	}
+	return &providers.ChatResponse{
+		Content: "ok",
+		Usage:   &providers.Usage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
+	}, nil
+}
+
+func (p *fakeChatProvider) ChatStream(ctx context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, req)
+}
+
+func (p *fakeChatProvider) DefaultModel() string { return p.model }
+func (p *fakeChatProvider) Name() string         { return p.name }
+
 type fakeUsageCapStore struct {
 	policies             []store.UsageCapPolicy
 	resolved             *store.ResolvedUsagePricing
@@ -329,6 +428,7 @@ type fakeUsageCapStore struct {
 	reconciled           store.UsageReconcileRequest
 	reconcileCalls       int
 	reconcileCtxCanceled bool
+	events               []store.UsageCapEvent
 }
 
 func (s *fakeUsageCapStore) UpsertPricingCatalog(context.Context, []store.UsagePricingCatalogEntry) (int, error) {
@@ -384,13 +484,17 @@ func (s *fakeUsageCapStore) ListUsageCapUtilization(context.Context, uuid.UUID) 
 func (s *fakeUsageCapStore) ListUsageCapEvents(context.Context, uuid.UUID, int) ([]store.UsageCapEvent, error) {
 	return nil, nil
 }
-func (s *fakeUsageCapStore) InsertUsageCapEvent(context.Context, *store.UsageCapEvent) error {
+func (s *fakeUsageCapStore) InsertUsageCapEvent(_ context.Context, event *store.UsageCapEvent) error {
+	if event != nil {
+		s.events = append(s.events, *event)
+	}
 	return nil
 }
 
 type fakeProviderStore struct {
 	provider       *store.LLMProviderData
 	masterProvider *store.LLMProviderData
+	requireTenant  uuid.UUID
 }
 
 func (s *fakeProviderStore) CreateProvider(context.Context, *store.LLMProviderData) error { return nil }
@@ -398,6 +502,9 @@ func (s *fakeProviderStore) GetProvider(context.Context, uuid.UUID) (*store.LLMP
 	return s.provider, nil
 }
 func (s *fakeProviderStore) GetProviderByName(ctx context.Context, _ string) (*store.LLMProviderData, error) {
+	if s.requireTenant != uuid.Nil && store.TenantIDFromContext(ctx) != s.requireTenant {
+		return nil, sql.ErrNoRows
+	}
 	if store.TenantIDFromContext(ctx) == store.MasterTenantID && s.masterProvider != nil {
 		return s.masterProvider, nil
 	}

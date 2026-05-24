@@ -333,7 +333,11 @@ func processNormalMessage(
 			if locale == "" {
 				locale = "en"
 			}
-			intent := agent.ClassifyIntent(ctx, loop.Provider(), loop.Model(), msg.Content)
+			classifyCtx := ctx
+			if uid := loop.UUID(); uid != uuid.Nil {
+				classifyCtx = store.WithAgentID(classifyCtx, uid)
+			}
+			intent := agent.ClassifyIntentWithUsageCaps(classifyCtx, deps.UsageCaps, loop.Provider(), loop.Model(), msg.Content)
 			switch intent {
 			case agent.IntentStatusQuery:
 				status := deps.Agents.GetActivity(sessionKey)

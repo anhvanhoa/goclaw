@@ -87,6 +87,21 @@ func init() {
 		// Provider
 		MsgProviderReqFailed: "%s: yêu cầu thất bại: %s",
 
+		// Usage caps / pricing
+		MsgUsageCapsListPoliciesFailed:          "không thể liệt kê chính sách usage cap",
+		MsgUsageCapPolicyValidationFailed:       "xác thực chính sách usage cap thất bại",
+		MsgUsageCapPolicyManaged:                "không thể chỉnh sửa chính sách usage cap do hệ thống quản lý",
+		MsgUsageCapsDeletePolicyFailed:          "không thể xóa chính sách usage cap",
+		MsgUsageCapsUtilizationFailed:           "không thể tải mức sử dụng usage cap",
+		MsgUsageCapsEventsFailed:                "không thể tải sự kiện usage cap",
+		MsgUsagePricingSyncOpenRouterFailed:     "không thể đồng bộ giá OpenRouter: %s",
+		MsgUsagePricingStoreCatalogFailed:       "không thể lưu catalog giá",
+		MsgUsagePricingListFailed:               "không thể liệt kê giá model",
+		MsgUsagePricingProviderModelRequired:    "provider_id và model_id là bắt buộc",
+		MsgUsagePricingOverrideValidationFailed: "xác thực override giá thất bại",
+		MsgUsagePricingListOverridesFailed:      "không thể liệt kê override giá",
+		MsgUsagePricingDeleteOverrideFailed:     "không thể xóa override giá",
+
 		// Unknown method
 		MsgUnknownMethod: "phương thức không xác định: %s",
 
@@ -200,10 +215,10 @@ func init() {
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
 
 		// TTS / Giọng đọc
-		MsgTtsUnknownModel:       "model tts không hỗ trợ: %s",
-		MsgVoicesListFailed:      "không tải được danh sách giọng đọc: %s",
-		MsgTtsGeminiInvalidVoice: "giọng đọc Gemini không hợp lệ: %s",
-		MsgTtsGeminiSpeakerLimit: "Gemini TTS hỗ trợ tối đa 2 người nói",
+		MsgTtsUnknownModel:        "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed:       "không tải được danh sách giọng đọc: %s",
+		MsgTtsGeminiInvalidVoice:  "giọng đọc Gemini không hợp lệ: %s",
+		MsgTtsGeminiSpeakerLimit:  "Gemini TTS hỗ trợ tối đa 2 người nói",
 		MsgTtsGeminiInvalidModel:  "mô hình Gemini TTS không hợp lệ: %s",
 		MsgTtsGeminiTextOnly:      "Gemini từ chối tạo âm thanh. Vui lòng thử văn bản đơn giản hơn, không dịch hay bình luận.",
 		MsgTtsParamOutOfRange:     "tham số TTS %q có giá trị %v nằm ngoài phạm vi [%v, %v]",

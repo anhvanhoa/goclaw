@@ -223,6 +223,7 @@ func runGateway() {
 		}
 	}
 	setupMemoryEmbeddings(pgStores, providerRegistry)
+	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
 	// Resolve background provider for consolidation + vault enrichment.
 	// Fallback: background.provider → agent.default_provider → first registered provider.
@@ -234,6 +235,7 @@ func runGateway() {
 			var kgExtractor *kg.Extractor
 			if pgStores.KnowledgeGraph != nil {
 				kgExtractor = kg.NewExtractor(bgProvider, bgModel, 0)
+				kgExtractor.SetUsageCapService(usageCapSvc)
 			}
 			cleanupConsolidation := consolidation.Register(consolidation.ConsolidationDeps{
 				EpisodicStore: pgStores.Episodic,
@@ -245,6 +247,7 @@ func runGateway() {
 				Registry:      providerRegistry,
 				Extractor:     kgExtractor,
 				AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
+				UsageCaps:     usageCapSvc,
 				AgentStore:    pgStores.Agents,
 			})
 			defer cleanupConsolidation()
@@ -267,6 +270,7 @@ func runGateway() {
 			MsgBus:        msgBus,
 			TeamStore:     pgStores.Teams,
 			AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
+			UsageCaps:     usageCapSvc,
 		})
 		enrichProgress = ep
 		enrichWorker = ew
@@ -283,7 +287,6 @@ func runGateway() {
 		slog.Info("bootstrap: capabilities backfill complete", "agents", count)
 	}
 
-	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 	if readImage, ok := toolsReg.Get("read_image"); ok {
 		if t, ok := readImage.(*tools.ReadImageTool); ok {
 			t.SetUsageCapService(usageCapSvc)
@@ -364,6 +367,7 @@ func runGateway() {
 		workspace:        workspace,
 		dataDir:          dataDir,
 		domainBus:        domainBus,
+		usageCapSvc:      usageCapSvc,
 		audioMgr:         audioMgr,
 	}
 
@@ -376,7 +380,7 @@ func runGateway() {
 	httpapi.InitGatewayNoAuthFallbackAllowed(config.GatewayNoAuthFallbackAllowed(cfg.Gateway))
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
-	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister, usageCapSvc)
 
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {
@@ -433,7 +437,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc)
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {
@@ -519,6 +523,7 @@ func runGateway() {
 		instanceLoader = channels.NewInstanceLoader(pgStores.ChannelInstances, pgStores.Agents, channelMgr, msgBus, pgStores.Pairing)
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
+		instanceLoader.SetUsageCapService(usageCapSvc)
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStoreAndAudio(pgStores.PendingMessages, audioMgr))

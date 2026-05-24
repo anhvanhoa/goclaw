@@ -20,6 +20,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -32,6 +33,7 @@ type ChatMethods struct {
 	eventBus    bus.EventPublisher
 	postTurn    tools.PostTurnProcessor
 	audioMgr    *audio.Manager // for TTS auto-apply on WS responses (nil = disabled)
+	usageCaps   *usagecaps.Service
 	debouncer   *chatDebouncer
 }
 
@@ -44,6 +46,10 @@ func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.C
 // SetAudioManager sets the audio manager for TTS auto-apply on WS responses.
 func (m *ChatMethods) SetAudioManager(mgr *audio.Manager) {
 	m.audioMgr = mgr
+}
+
+func (m *ChatMethods) SetUsageCapService(s *usagecaps.Service) {
+	m.usageCaps = s
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -352,7 +358,10 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 			// Use runCtxBase (WithoutCancel + tenant-aware) so title save uses correct tenant.
 			titleCtx := runCtxBase
 			go func() {
-				title := agent.GenerateTitle(titleCtx, agentProvider, agentModel, userMsg)
+				if uid := loop.UUID(); uid != uuid.Nil {
+					titleCtx = store.WithAgentID(titleCtx, uid)
+				}
+				title := agent.GenerateTitleWithUsageCaps(titleCtx, m.usageCaps, agentProvider, agentModel, userMsg)
 				if title == "" {
 					return
 				}
