@@ -64,6 +64,12 @@
     "modelPlaceholder": "(default)",
     "info": "Used for vault enrichment (document summarization), consolidation (session summaries), and dreaming. Leave empty to fall back to the agent default provider."
   },
+  "skills": {
+    "title": "Skills",
+    "description": "Tenant skill package upload limits.",
+    "maxUploadSize": "Max upload size",
+    "maxUploadSizeHint": "Per-file ZIP limit in MB. Allowed range: 1-500."
+  },
   "compaction": {
     "title": "Pending Message Compaction",
     "description": "Summarize long pending message history to stay within context limits.",

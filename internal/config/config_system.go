@@ -74,6 +74,10 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("tools.browser.max_pages", &c.Tools.Browser.MaxPages)
 	boolValue("tools.browser.cookie_sync_enabled", &c.Tools.Browser.CookieSyncEnabled)
 
+	// Skills
+	integer(SkillMaxUploadSizeSystemConfigKey, &c.Skills.MaxUploadSizeMB)
+	c.Skills.MaxUploadSizeMB = ClampSkillMaxUploadSizeMB(c.Skills.MaxUploadSizeMB)
+
 	// TTS
 	str("tts.provider", &c.Tts.Provider)
 	str("tts.auto", &c.Tts.Auto)

@@ -106,7 +106,7 @@
   },
   "upload": {
     "title": "Upload Skills",
-    "description": "Upload ZIP files containing SKILL.md with YAML frontmatter (name, description, slug).",
+    "description": "Upload ZIP files containing SKILL.md with YAML frontmatter (name, description, slug). Max {{max}} MB per file.",
     "button": "Upload",
     "uploading": "Uploading...",
     "dropOrClick": "Click or drag & drop .zip files",
@@ -114,7 +114,7 @@
     "onlyZip": "Only .zip files are accepted",
     "cancel": "Cancel",
     "done": "Done",
-    "tooLarge": "File exceeds 20MB limit",
+    "tooLarge": "File exceeds the configured upload limit",
     "invalidZip": "Invalid ZIP file",
     "noSkillMd": "ZIP must contain SKILL.md at root",
     "emptySkillMd": "SKILL.md is empty",

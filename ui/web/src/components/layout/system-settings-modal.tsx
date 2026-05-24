@@ -17,6 +17,7 @@ import { toast } from "@/stores/use-toast-store";
 import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODELS, DEFAULTS, parseBool, type InitState } from "./system-settings-constants";
 import { SystemSettingsEmbeddingCard } from "./system-settings-embedding-card";
 import { SystemSettingsCompactionCard } from "./system-settings-compaction-card";
+import { SystemSettingsSkillsCard } from "./system-settings-skills-card";
 import { Eye, MessageSquareText, Brain } from "lucide-react";
 
 interface SystemSettingsModalProps {
@@ -60,6 +61,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // Background Workers
   const [bgProvider, setBgProvider] = useState("");
   const [bgModel, setBgModel] = useState("");
+  const [skillUploadMaxSize, setSkillUploadMaxSize] = useState("20");
 
   const applyConfigs = useCallback((
     configs: Record<string, string>,
@@ -76,6 +78,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       kgProvider: kgSettings?.extraction_provider ?? "", kgModel: kgSettings?.extraction_model ?? "",
       kgMinConfidence: String(kgSettings?.min_confidence ?? 0.75),
       bgProvider: configs["background.provider"] ?? "", bgModel: configs["background.model"] ?? "",
+      skillUploadMaxSize: configs["skills.max_upload_size_mb"] ?? "20",
     };
     setInit(s);
     setEmbProvider(s.embProvider); setEmbModel(s.embModel); setEmbMaxChunkLen(s.embMaxChunkLen); setEmbChunkOverlap(s.embChunkOverlap);
@@ -83,6 +86,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setCompProvider(s.compProvider); setCompModel(s.compModel); setCompThreshold(s.compThreshold); setCompKeepRecent(s.compKeepRecent); setCompMaxTokens(s.compMaxTokens);
     setKgProvider(s.kgProvider); setKgModel(s.kgModel); setKgMinConfidence(s.kgMinConfidence);
     setBgProvider(s.bgProvider); setBgModel(s.bgModel);
+    setSkillUploadMaxSize(s.skillUploadMaxSize);
     resetEmb();
   }, [resetEmb]);
 
@@ -126,6 +130,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (compMaxTokens !== init.compMaxTokens) updates["compaction.max_tokens"] = compMaxTokens;
       if (bgProvider !== init.bgProvider) updates["background.provider"] = bgProvider;
       if (bgModel !== init.bgModel) updates["background.model"] = bgModel;
+      if (skillUploadMaxSize !== init.skillUploadMaxSize) updates["skills.max_upload_size_mb"] = skillUploadMaxSize;
       for (const [key, value] of Object.entries(updates)) await http.put(`/v1/system-configs/${key}`, { value });
       const kgChanged = kgProvider !== init.kgProvider || kgModel !== init.kgModel || kgMinConfidence !== init.kgMinConfidence;
       if (kgChanged) {
@@ -202,6 +207,11 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
             </Card>
 
             <FeatureSwitchGroup title={t("ux.title")} description={t("ux.description")} items={uxItems} />
+
+            <SystemSettingsSkillsCard
+              uploadMaxSize={skillUploadMaxSize}
+              setUploadMaxSize={setSkillUploadMaxSize}
+            />
 
             <SystemSettingsCompactionCard
               compProvider={compProvider} setCompProvider={setCompProvider}

@@ -64,7 +64,7 @@
   },
   "upload": {
     "title": "Tải lên Skill",
-    "description": "Tải lên tệp ZIP chứa SKILL.md với YAML frontmatter (name, description, slug).",
+    "description": "Tải lên tệp ZIP chứa SKILL.md với YAML frontmatter (name, description, slug). Tối đa {{max}} MB mỗi tệp.",
     "button": "Tải lên",
     "uploading": "Đang tải lên...",
     "dropOrClick": "Nhấp hoặc kéo thả tệp .zip",
@@ -72,7 +72,7 @@
     "onlyZip": "Chỉ chấp nhận tệp .zip",
     "cancel": "Hủy",
     "done": "Xong",
-    "tooLarge": "Tệp vượt quá giới hạn 20MB",
+    "tooLarge": "Tệp vượt quá giới hạn tải lên đã cấu hình",
     "invalidZip": "Tệp ZIP không hợp lệ",
     "noSkillMd": "ZIP phải chứa SKILL.md ở thư mục gốc",
     "emptySkillMd": "SKILL.md trống",

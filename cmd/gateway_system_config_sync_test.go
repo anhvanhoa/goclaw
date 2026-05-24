@@ -46,3 +46,17 @@ func TestSeedConfigForContextPersistsZeroInboundDebounce(t *testing.T) {
 		t.Fatalf("gateway.inbound_debounce_ms = %q, want 0", got)
 	}
 }
+
+func TestSeedConfigForContextDoesNotCreateSkillUploadTenantOverride(t *testing.T) {
+	t.Parallel()
+
+	sc := &captureSystemConfigStore{data: map[string]string{}}
+	cfg := config.Default()
+	cfg.Skills.MaxUploadSizeMB = 64
+
+	seedConfigForContext(store.WithTenantID(context.Background(), store.MasterTenantID), sc, cfg, false)
+
+	if _, ok := sc.data[config.SkillMaxUploadSizeSystemConfigKey]; ok {
+		t.Fatalf("%s should not be seeded; missing key lets SKILL.md frontmatter override global config", config.SkillMaxUploadSizeSystemConfigKey)
+	}
+}

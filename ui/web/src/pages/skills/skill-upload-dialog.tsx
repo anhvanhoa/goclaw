@@ -21,6 +21,7 @@ import { uniqueId } from "@/lib/utils";
 import type { SkillUploadOptions, SkillUploadResponse } from "./hooks/use-skills";
 import type { FileEntry, SkillStatus } from "./lib/skill-upload-types";
 import { FileEntryBlock } from "./skill-upload-entry";
+import { useSkillUploadLimit } from "./hooks/use-skill-upload-limit";
 import JSZip from "jszip";
 
 interface SkillUploadDialogProps {
@@ -38,6 +39,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
   const [grantManagers, setGrantManagers] = useState(true);
   const [managerAgentIds, setManagerAgentIds] = useState<string[]>([]);
   const { agents, refresh: refreshAgents } = useAgents();
+  const maxUploadSizeMB = useSkillUploadLimit(open);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     // Validate all files concurrently
     const results = await Promise.all(
       pending.map(async (entry) => {
-        const resolved = await resolveUploadSkills(entry.file);
+        const resolved = await resolveUploadSkills(entry.file, undefined, { maxUploadSizeMB });
         return {
           id: entry.id,
           skills: resolved.map((skill) => ({
@@ -263,7 +265,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
       <DialogContent className="max-h-[80dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t("upload.title")}</DialogTitle>
-          <DialogDescription>{t("upload.description")}</DialogDescription>
+          <DialogDescription>{t("upload.description", { max: maxUploadSizeMB })}</DialogDescription>
         </DialogHeader>
 
         {/* Drop zone — hidden once upload starts or finishes */}

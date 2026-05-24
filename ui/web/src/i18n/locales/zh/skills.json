@@ -64,7 +64,7 @@
   },
   "upload": {
     "title": "上传Skill",
-    "description": "上传包含带 YAML frontmatter (name, description, slug) 的 SKILL.md 的 ZIP 文件。",
+    "description": "上传包含带 YAML frontmatter (name, description, slug) 的 SKILL.md 的 ZIP 文件。每个文件最大 {{max}} MB。",
     "button": "上传",
     "uploading": "上传中...",
     "dropOrClick": "点击或拖放 .zip 文件",
@@ -72,7 +72,7 @@
     "onlyZip": "只接受 .zip 文件",
     "cancel": "取消",
     "done": "完成",
-    "tooLarge": "文件超过 20MB 限制",
+    "tooLarge": "文件超过配置的上传限制",
     "invalidZip": "无效的 ZIP 文件",
     "noSkillMd": "ZIP 必须包含根目录的 SKILL.md",
     "emptySkillMd": "SKILL.md 为空",

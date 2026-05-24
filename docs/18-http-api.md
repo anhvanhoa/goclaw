@@ -321,7 +321,7 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/skills` | List all skills |
-| `POST` | `/v1/skills/upload` | Upload ZIP with SKILL.md (20 MB limit) |
+| `POST` | `/v1/skills/upload` | Upload ZIP with SKILL.md (configurable 20 MB default, 1-500 MB range) |
 | `GET` | `/v1/skills/{id}` | Get skill details |
 | `PUT` | `/v1/skills/{id}` | Update skill metadata |
 | `DELETE` | `/v1/skills/{id}` | Delete skill (not system skills) |
@@ -330,6 +330,12 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
 ### Skill Grants
+
+Skill upload size is enforced per ZIP file. The effective limit resolves in this order:
+tenant `system_configs["skills.max_upload_size_mb"]`, then `SKILL.md` frontmatter
+`max_upload_size_mb`, then config/env `skills.max_upload_size_mb` /
+`GOCLAW_SKILLS_MAX_UPLOAD_SIZE_MB`, then the default 20 MB. Values are clamped
+to 1-500 MB.
 
 | Method | Path | Description |
 |--------|------|-------------|

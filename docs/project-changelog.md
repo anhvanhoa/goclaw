@@ -6,6 +6,17 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-05-24
 
+### Configurable skill upload limits
+
+**Features**
+
+- Added configurable skill ZIP upload limits with config/env, SKILL.md frontmatter, and tenant system setting support.
+- Added dashboard settings and dynamic upload validation so the Web UI follows the tenant limit instead of hardcoding 20MB.
+
+**Tests**
+
+- Added backend coverage for limit precedence, clamping, oversized rejection, and frontend coverage for parameterized upload validation.
+
 ### CLI environment variable visibility
 
 **Features**

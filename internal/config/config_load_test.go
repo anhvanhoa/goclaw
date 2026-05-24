@@ -24,6 +24,9 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Agents.Defaults.MaxToolIterations != DefaultMaxIterations {
 		t.Fatalf("default max iterations: got %d", cfg.Agents.Defaults.MaxToolIterations)
 	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != DefaultSkillMaxUploadSizeMB {
+		t.Fatalf("default skill upload max: got %d, want %d", cfg.Skills.EffectiveMaxUploadSizeMB(), DefaultSkillMaxUploadSizeMB)
+	}
 
 }
 
@@ -100,6 +103,52 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 	}
 	if cfg.Gateway.Port != 7777 {
 		t.Fatalf("env override: got port %d, want 7777", cfg.Gateway.Port)
+	}
+}
+
+func TestLoad_SkillsMaxUploadSizeFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"skills":{"max_upload_size_mb":64}}`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != 64 {
+		t.Fatalf("file skill upload max: got %d, want 64", cfg.Skills.EffectiveMaxUploadSizeMB())
+	}
+
+	t.Setenv("GOCLAW_SKILLS_MAX_UPLOAD_SIZE_MB", "128")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env error: %v", err)
+	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != 128 {
+		t.Fatalf("env skill upload max: got %d, want 128", cfg.Skills.EffectiveMaxUploadSizeMB())
+	}
+}
+
+func TestSkillsMaxUploadSizeClampAndSystemConfigOverlay(t *testing.T) {
+	cfg := Default()
+	cfg.Skills.MaxUploadSizeMB = 0
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != DefaultSkillMaxUploadSizeMB {
+		t.Fatalf("zero upload max: got %d, want %d", got, DefaultSkillMaxUploadSizeMB)
+	}
+
+	cfg.Skills.MaxUploadSizeMB = -10
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != MinSkillMaxUploadSizeMB {
+		t.Fatalf("negative upload max: got %d, want %d", got, MinSkillMaxUploadSizeMB)
+	}
+
+	cfg.Skills.MaxUploadSizeMB = 999
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != MaxSkillMaxUploadSizeMB {
+		t.Fatalf("high upload max: got %d, want %d", got, MaxSkillMaxUploadSizeMB)
+	}
+
+	cfg.ApplySystemConfigs(map[string]string{"skills.max_upload_size_mb": "77"})
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != 77 {
+		t.Fatalf("system config upload max: got %d, want 77", got)
 	}
 }
 

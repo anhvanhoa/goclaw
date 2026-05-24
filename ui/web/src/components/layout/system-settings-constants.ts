@@ -44,6 +44,7 @@ export interface InitState {
   kgMinConfidence: string;
   bgProvider: string;
   bgModel: string;
+  skillUploadMaxSize: string;
 }
 
 export const DEFAULTS: InitState = {
@@ -54,6 +55,7 @@ export const DEFAULTS: InitState = {
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
   bgProvider: "", bgModel: "",
+  skillUploadMaxSize: "20",
 };
 
 export function parseBool(v: string | undefined, fallback: boolean): boolean {

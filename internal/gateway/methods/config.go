@@ -265,14 +265,27 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 				"type":        "object",
 				"description": "Gateway server settings (host, port, token)",
 			},
-			"tools": map[string]any{
-				"type":        "object",
-				"description": "Tool configuration (browser, exec, web search)",
-			},
-			"sessions": map[string]any{
-				"type":        "object",
-				"description": "Session storage configuration",
-			},
+				"tools": map[string]any{
+					"type":        "object",
+					"description": "Tool configuration (browser, exec, web search)",
+				},
+				"skills": map[string]any{
+					"type":        "object",
+					"description": "Skill storage and upload settings",
+					"properties": map[string]any{
+						"max_upload_size_mb": map[string]any{
+							"type":        "integer",
+							"minimum":     config.MinSkillMaxUploadSizeMB,
+							"maximum":     config.MaxSkillMaxUploadSizeMB,
+							"default":     config.DefaultSkillMaxUploadSizeMB,
+							"description": "Maximum skill ZIP upload size in MB",
+						},
+					},
+				},
+				"sessions": map[string]any{
+					"type":        "object",
+					"description": "Session storage configuration",
+				},
 		},
 	}
 

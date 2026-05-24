@@ -107,6 +107,9 @@ func Default() *Config {
 			},
 			RateLimitPerHour: 150,
 		},
+		Skills: SkillsConfig{
+			MaxUploadSizeMB: DefaultSkillMaxUploadSizeMB,
+		},
 		Sessions: SessionsConfig{},
 	}
 }
@@ -232,6 +235,11 @@ func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("GOCLAW_PORT"); v != "" {
 		if port, err := strconv.Atoi(v); err == nil && port > 0 {
 			c.Gateway.Port = port
+		}
+	}
+	if v := os.Getenv("GOCLAW_SKILLS_MAX_UPLOAD_SIZE_MB"); v != "" {
+		if mb, err := strconv.Atoi(v); err == nil {
+			c.Skills.MaxUploadSizeMB = ClampSkillMaxUploadSizeMB(mb)
 		}
 	}
 

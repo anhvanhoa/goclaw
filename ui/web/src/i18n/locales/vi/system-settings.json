@@ -64,6 +64,12 @@
     "modelPlaceholder": "(mặc định)",
     "info": "Dùng cho vault enrichment (tóm tắt tài liệu), consolidation (tóm tắt phiên) và dreaming. Để trống sẽ fallback về agent default provider."
   },
+  "skills": {
+    "title": "Skills",
+    "description": "Giới hạn tải lên gói skill theo tenant.",
+    "maxUploadSize": "Dung lượng tải lên tối đa",
+    "maxUploadSizeHint": "Giới hạn ZIP theo từng tệp, tính bằng MB. Khoảng cho phép: 1-500."
+  },
   "compaction": {
     "title": "Nén tin nhắn chờ",
     "description": "Tóm tắt lịch sử tin nhắn chờ dài để nằm trong giới hạn context.",
