@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 39
+const SchemaVersion = 42
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -765,6 +765,13 @@ CREATE INDEX IF NOT EXISTS idx_browser_cookies_scope_domain
     ON browser_cookies (tenant_id, user_id, agent_id, domain);
 CREATE INDEX IF NOT EXISTS idx_browser_cookies_expires_at
     ON browser_cookies (expires_at);`,
+
+	// Version 39 → 40: credential adapter framework — credential_type on user creds.
+	39: `ALTER TABLE secure_cli_user_credentials ADD COLUMN credential_type TEXT;`,
+	// Version 40 → 41: credential adapter framework — host_scope on user creds.
+	40: `ALTER TABLE secure_cli_user_credentials ADD COLUMN host_scope TEXT;`,
+	// Version 41 → 42: credential adapter framework — adapter_name on binaries.
+	41: `ALTER TABLE secure_cli_binaries ADD COLUMN adapter_name TEXT;`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.
@@ -1043,6 +1050,12 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 		return "agents", "model_fallback", true
 	case 34:
 		return "skill_agent_grants", "can_manage", true
+	case 39:
+		return "secure_cli_user_credentials", "credential_type", true
+	case 40:
+		return "secure_cli_user_credentials", "host_scope", true
+	case 41:
+		return "secure_cli_binaries", "adapter_name", true
 	default:
 		return "", "", false
 	}

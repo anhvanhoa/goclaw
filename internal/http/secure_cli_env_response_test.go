@@ -48,6 +48,9 @@ func (s *fakeSecureCLIStore) GetUserCredentials(context.Context, uuid.UUID, stri
 func (s *fakeSecureCLIStore) SetUserCredentials(context.Context, uuid.UUID, string, []byte) error {
 	return nil
 }
+func (s *fakeSecureCLIStore) SetUserCredentialsTyped(context.Context, uuid.UUID, string, []byte, *string, *string) error {
+	return nil
+}
 func (s *fakeSecureCLIStore) DeleteUserCredentials(context.Context, uuid.UUID, string) error {
 	return nil
 }

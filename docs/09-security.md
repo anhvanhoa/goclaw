@@ -497,6 +497,111 @@ Package name validation is defense-in-depth at three layers:
 
 ---
 
+## 14. CLI Credential Adapters
+
+The CLI credential adapter framework is the system-trusted path for injecting
+auth material into spawned CLI subprocesses (`git clone`, `kubectl apply`,
+`psql`, …). It is the second of two distinct trust boundaries for env-var
+injection — distinct from, not a replacement for, the user-paste denylist.
+
+User guide: [git-credential-adapter.md](./git-credential-adapter.md).
+Implementer guide: [credential-adapter-playbook.md](./credential-adapter-playbook.md).
+
+### Trust-boundary diagram
+
+```
+┌──────────────────────────────┐      ┌──────────────────────────────────┐
+│  User-pasted env vars        │      │  System-injected adapter Env     │
+│  (CLI Credentials → "env")   │      │  (CredentialAdapter.Prepare)     │
+│                              │      │                                  │
+│  ValidateGrantEnvVars         │      │  bypasses denylist               │
+│  rejects GIT_SSH_COMMAND,    │      │  emits security.system_env_      │
+│  LD_PRELOAD, PATH, …          │      │  injection slog.Warn per call    │
+└──────────────────────────────┘      └──────────────────────────────────┘
+        first line of defense                     second, audit-trailed line
+```
+
+Both paths coexist. A typo in `adapter_name` falls back to passthrough, which
+restores the legacy denylist-only behavior — no silent bypass.
+
+### Audit log: `security.system_env_injection`
+
+Every adapter injection emits **exactly one** structured slog line. Field
+schema is pinned by `TestEmitSystemEnvInjectionAudit_*` in
+`internal/tools/credential_audit_log_test.go` — changes here must update both
+the test and operator-facing log-search recipes.
+
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| `msg` | string | always `security.system_env_injection` |
+| `adapter` | string | e.g. `git`, `psql`, `passthrough` |
+| `binary` | string | binary name (`git`, `kubectl`, …) |
+| `user_id` | string | tenant user UUID (empty for global-only contexts) |
+| `env_keys` | []string | sorted env-var NAMES (never values) |
+| `argv_prefix_len` | int | number of argv elements prepended (NOT their content) |
+| `host_scope_hash` | string | SHA-256 first 8 hex chars of normalized host_scope, or `"none"` |
+
+**Plaintext hostname is intentionally omitted** to keep audit logs PII-safe
+when goclaw is deployed inside a regulated tenant. Operators wanting to grep
+for activity against a specific host pre-compute the hash:
+
+```sh
+echo -n "github.com" | sha256sum | cut -c1-8
+```
+
+Routing: `slog.Warn` writes to whatever the host runtime captures — for the
+default goclaw deployment that's stderr → systemd/journald or Docker logs.
+There is **no dedicated audit table** in v1 (see future work below).
+
+### SSH TOFU MITM caveat
+
+The git adapter's SSH path sets `StrictHostKeyChecking=accept-new`, which
+accepts unknown host keys on first contact. A network attacker positioned
+between goclaw and the git host CAN capture the SSH session on the first
+connection.
+
+Operators should pre-seed `~/.ssh/known_hosts` at deployment time:
+
+```sh
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+ssh-keyscan -p 22 gitea.internal >> ~/.ssh/known_hosts
+```
+
+Once a host key is in `known_hosts`, `accept-new` enforces match-or-fail on
+subsequent connections — the TOFU window is one connection per host.
+
+v2 will support per-credential pinned host keys (removes TOFU entirely).
+
+### SIGKILL residual material
+
+Ephemeral filesystem credentials (SSH key tmpfiles, `.pgpass` tmpfiles, future
+KUBECONFIG/DOCKER_CONFIG tmpfiles) rely on `defer cleanup()` to remove
+themselves after exec returns.
+
+`SIGKILL` of the goclaw process leaves these 0600 files in `os.TempDir()`. On
+POSIX, `os.TempDir()` is per-user, so exposure is limited to the goclaw uid.
+
+High-security deployments should run a periodic sweep:
+
+```sh
+find "$TMPDIR" -name 'goclaw-gitkey-*' -mmin +60 -delete
+find "$TMPDIR" -name 'goclaw-pgpass-*' -mmin +60 -delete
+```
+
+### Open future work
+
+- Dedicated `audit_log` table for `security.system_env_injection` events
+  (operator-grade query surface; v1 only writes slog).
+- Multi-credential per user with host-routing logic (v1: one per
+  user+binary+host_scope).
+- Sandbox/Docker exec path support (v1 adapter is incompatible with the
+  bind-mount-based sandbox path).
+- Pinned SSH host keys per credential (replace TOFU).
+- Credential-refresh primitive for `aws sts assume-role`-style short-lived
+  STS credentials.
+
+---
+
 ## File Reference
 
 | Module | Path | Purpose |

@@ -397,6 +397,35 @@ Tool output is automatically scrubbed before being returned to the LLM or the us
 
 The exact patterns are intentionally not published here (defense-in-depth). The scrubber is always enabled in the registry by default.
 
+### 8a. Credential adapter framework
+
+For tool binaries that need per-user typed credentials (PAT, SSH key,
+kubeconfig, `.pgpass`, etc.), the `CredentialAdapter` interface in
+`internal/tools/credential_adapter.go` transforms a stored credential into
+the argv/env/ephemeral-file shape the binary expects.
+
+- **`Name() string`** — the value stored in `secure_cli_binaries.adapter_name`.
+- **`ShouldInject(argv []string) bool`** — gate that skips local-only
+  subcommands (e.g. `git status` does not trigger injection).
+- **`Prepare(...) (*Injection, error)`** — returns the four-field
+  `Injection{ArgvPrefix, Env, Cleanup, ScrubValues}` consumed by
+  `credentialed_exec.go`.
+
+Adapters are registered in their own `init()` via `RegisterAdapter`. Lookup
+falls back to the `passthrough` no-op adapter on unknown/empty names, so
+unrelated presets (`gh`, `aws`, `gcloud`, `kubectl`, `terraform`, `gws`)
+keep their legacy env-injection path bit-for-bit.
+
+Per-injection audit: every adapter run emits one
+`slog.Warn("security.system_env_injection", …)` line with the field schema
+documented in [09-security.md § 14](./09-security.md#14-cli-credential-adapters).
+
+To author a new adapter (kubectl, docker, npm, aws, …), follow the worked
+mappings + interface-validation gate in
+[credential-adapter-playbook.md](./credential-adapter-playbook.md). User-facing
+config for the shipped `git` adapter is documented in
+[git-credential-adapter.md](./git-credential-adapter.md).
+
 ---
 
 ## 9. Per-Tenant Config (4-Tier Overlay)

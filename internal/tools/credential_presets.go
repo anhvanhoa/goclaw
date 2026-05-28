@@ -13,6 +13,12 @@ type CLIPreset struct {
 	DenyVerbose []string    `json:"deny_verbose"`
 	Timeout     int         `json:"timeout"`
 	Tips        string      `json:"tips"`
+	// AdapterName defaults the binary row's adapter_name column at create
+	// time. Empty (default) → passthrough adapter (legacy env injection).
+	// Set to e.g. "git" by typed-credential presets (Phase 3+). Runtime
+	// adapter lookup reads the DB column, not this field — so operator
+	// overrides post-create take precedence.
+	AdapterName string `json:"adapter_name,omitempty"`
 }
 
 // EnvVarDef describes an environment variable required by a CLI tool.
@@ -93,6 +99,45 @@ var CLIPresets = map[string]CLIPreset{
 		DenyVerbose: nil,
 		Timeout:     300,
 		Tips:        "Use -json flag for structured output",
+	},
+	"git": {
+		BinaryName:  "git",
+		Description: "Git with credential adapter (PAT or SSH host-scoped credentials managed by goclaw)",
+		// Credential storage is adapter-managed (encrypted_env carries the
+		// typed blob), not env-paste. Keep EnvVars empty so the UI doesn't
+		// offer a free-text PAT field that would land in plain env.
+		EnvVars: nil,
+		// Deny patterns block the agent from:
+		//   - persisting tokens via `git config --global/--system`
+		//   - installing a leaking credential helper
+		//   - starting an unauthenticated git daemon
+		//   - overriding the adapter's host-scoped `http.*` header via `-c`
+		//   - shadowing core.sshCommand to bypass the adapter's SSH wrapper
+		// Patterns are case-insensitive because git config keys themselves are.
+		DenyArgs: []string{
+			`(?i)config\s+(--global|--system)`,
+			`(?i)credential-helper`,
+			`(?i)\bdaemon\b`,
+			`(?i)-c\s+http\.`,
+			`(?i)-c\s+credential\.`,
+			`(?i)-c\s+core\.sshcommand`,
+		},
+		DenyVerbose: nil,
+		Timeout:     300,
+		Tips:        "Adapter handles auth automatically for clone/fetch/pull/push/submodule based on stored credential type and host scope.",
+		AdapterName: "git",
+	},
+	"psql": {
+		BinaryName:  "psql",
+		Description: "PostgreSQL CLI — framework-validation preset for the typed-credential adapter (Phase 2b). UI cred-type picker lands in v2; until then operators wire `pg_password_file` credentials via API.",
+		EnvVars: []EnvVarDef{
+			{Name: "PGPASSFILE", Desc: "Path to .pgpass file (auto-materialized by adapter when credential_type='pg_password_file')", IsFile: true, Optional: true},
+		},
+		DenyArgs:    []string{`-c\s+["']?(DROP|TRUNCATE)\b`, `\\!`, `\\copy\s+.*FROM\s+PROGRAM`},
+		DenyVerbose: nil,
+		Timeout:     60,
+		Tips:        "Use -A -t for plain output suitable for piping",
+		AdapterName: "psql",
 	},
 }
 

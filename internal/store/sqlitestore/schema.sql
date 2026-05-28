@@ -1208,6 +1208,7 @@ CREATE TABLE IF NOT EXISTS secure_cli_binaries (
     enabled         BOOLEAN NOT NULL DEFAULT 1,
     created_by      TEXT NOT NULL DEFAULT '',
     tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    adapter_name    TEXT,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1501,14 +1502,16 @@ CREATE INDEX IF NOT EXISTS idx_kg_dedup_agent ON kg_dedup_candidates(agent_id, s
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS secure_cli_user_credentials (
-    id            TEXT NOT NULL PRIMARY KEY,
-    binary_id     TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
-    user_id       VARCHAR(255) NOT NULL,
-    encrypted_env BLOB NOT NULL,
-    metadata      TEXT NOT NULL DEFAULT '{}',
-    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
-    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    id              TEXT NOT NULL PRIMARY KEY,
+    binary_id       TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    user_id         VARCHAR(255) NOT NULL,
+    encrypted_env   BLOB NOT NULL,
+    metadata        TEXT NOT NULL DEFAULT '{}',
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    credential_type TEXT,
+    host_scope      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE(binary_id, user_id, tenant_id)
 );
 

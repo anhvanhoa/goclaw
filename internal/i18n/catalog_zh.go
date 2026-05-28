@@ -307,6 +307,20 @@ func init() {
 		MsgGrantEnvTooManyKeys:  "环境变量键过多：最多 50 个",
 		MsgGrantEnvRevealLimit:  "env 查看请求超出速率限制，请稍后再试",
 
+		// Git 凭据适配器
+		MsgGitCredHostMismatch:         "已存储的 git 凭据属于 %s，但命令目标是 %s",
+		MsgGitCredNoMatch:              "没有为主机 %s 配置 git 凭据",
+		MsgGitCredUnsupportedType:      "不支持的 git 凭据类型 %q",
+		MsgGitCredTokenInvalid:         "已存储的 git token 无效或为空",
+		MsgGitCredTokenControlChar:     "已存储的 git token 包含被禁止的控制字符",
+		MsgGitCredHostUserinfoRejected:     "git URL 中嵌入的 userinfo 因含义不明被拒绝",
+		MsgGitCredSSHPassphraseUnsupported: "暂不支持带密码短语的 SSH 私钥；请先用 `ssh-keygen -p` 移除密码短语再保存",
+		MsgGitCredSSHKeyInvalid:            "SSH 私钥无效:%s",
+		MsgGitCredHostScopeRequired:        "credential_type %s 需要 host_scope",
+		MsgGitCredHostScopeInvalid:         "host_scope %q 不是有效的主机名",
+		MsgGitCredBlobMissingField:         "凭据 blob 缺少必填字段 %q",
+		MsgGitCredUnsupportedCredType:      "不支持的 credential_type %q",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 

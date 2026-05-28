@@ -307,6 +307,20 @@ func init() {
 		MsgGrantEnvTooManyKeys:  "quá nhiều khóa env: tối đa 50",
 		MsgGrantEnvRevealLimit:  "đã vượt giới hạn yêu cầu xem env — vui lòng thử lại sau",
 
+		// Git credential adapter
+		MsgGitCredHostMismatch:         "thông tin xác thực git đã lưu dành cho %s nhưng lệnh đang nhắm tới %s",
+		MsgGitCredNoMatch:              "không có thông tin xác thực git cho host %s",
+		MsgGitCredUnsupportedType:      "loại thông tin xác thực git %q không được hỗ trợ",
+		MsgGitCredTokenInvalid:         "token git đã lưu không hợp lệ hoặc rỗng",
+		MsgGitCredTokenControlChar:     "token git đã lưu chứa ký tự điều khiển bị cấm",
+		MsgGitCredHostUserinfoRejected:     "URL git chứa userinfo nhúng bị từ chối vì gây nhập nhằng",
+		MsgGitCredSSHPassphraseUnsupported: "khóa SSH có passphrase chưa được hỗ trợ; chạy `ssh-keygen -p` để gỡ passphrase trước khi lưu",
+		MsgGitCredSSHKeyInvalid:            "khóa riêng SSH không hợp lệ: %s",
+		MsgGitCredHostScopeRequired:        "host_scope là bắt buộc cho credential_type %s",
+		MsgGitCredHostScopeInvalid:         "host_scope %q không phải là tên máy chủ hợp lệ",
+		MsgGitCredBlobMissingField:         "blob credential thiếu trường bắt buộc %q",
+		MsgGitCredUnsupportedCredType:      "credential_type %q không được hỗ trợ",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 

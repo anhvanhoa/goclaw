@@ -36,6 +36,11 @@ export interface SecureCLIBinary {
    * Absent on older API versions — capability-probe: skip rendering if undefined.
    */
   agent_grants_summary?: AgentGrantSummary[];
+  /**
+   * Adapter name routes per-user credentials through a typed flow.
+   * Phase 5: "git" → PAT/SSH form fields; absent/empty → legacy env-vars form.
+   */
+  adapter_name?: string;
 }
 
 export interface CLIPresetEnvVar {

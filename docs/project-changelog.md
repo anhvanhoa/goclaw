@@ -4,6 +4,83 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-05-28
+
+### CLI credential adapter framework + git adapter (issue #82)
+
+Refactors `credentialed_exec.go` from "flat env-var injection only" to a
+generic `CredentialAdapter` interface that supports argv prefix injection,
+ephemeral filesystem material, system-trusted env vars, and per-injection
+redaction. Existing presets (`gh`, `aws`, `gcloud`, `kubectl`, `terraform`,
+`gws`) route through a passthrough adapter and keep current behavior
+bit-for-bit.
+
+**New**
+
+- `CredentialAdapter` interface + registry in `internal/tools/credential_adapter.go`.
+  Default `passthrough` adapter preserves legacy behavior; named adapters
+  register via `init() → RegisterAdapter`.
+- `git` adapter (`internal/tools/credential_adapter_git.go`) covering both
+  HTTPS PAT and SSH key paths. PAT injected via `GIT_CONFIG_COUNT` +
+  `GIT_CONFIG_KEY_*`/`GIT_CONFIG_VALUE_*` env vars (never argv → keeps token
+  off `ps`/`/proc/<pid>/cmdline`). SSH key materialized to 0600 tmpfile +
+  `GIT_SSH_COMMAND` with `IdentitiesOnly=yes` and `StrictHostKeyChecking=accept-new`.
+  Passphrase-protected SSH keys rejected at validation with
+  `git.cred_ssh_passphrase_unsupported`.
+- `psql` framework-validation stub adapter (`internal/tools/credential_adapter_psql.go`)
+  proving the interface holds for non-git credential families.
+- Shared `materializeEphemeral` helper (`internal/tools/credential_ephemeral.go`)
+  with idempotent cleanup latch and explicit `0600` chmod.
+- Per-injection audit log: `slog.Warn("security.system_env_injection", …)`
+  with `adapter`, `binary`, `user_id`, sorted `env_keys` (names only),
+  `argv_prefix_len`, `host_scope_hash` (SHA-256 first 8 hex chars — plaintext
+  hostname intentionally omitted for PII safety). Schema pinned by
+  `TestEmitSystemEnvInjectionAudit_*`.
+- Typed-credential HTTP PUT path with `{error:{code,message}, error_key}`
+  envelope so the web UI can drive field-level validation
+  (`git.cred_host_scope_required`, `git.cred_ssh_passphrase_unsupported`,
+  etc.).
+- Web UI: `CliCredentialGitFields` extends the CLI Credentials dialog with
+  `Personal Access Token` / `SSH Private Key` picker, host-scope input,
+  CRLF→LF paste normalization, masked-secret edit flow (`••••••••`
+  placeholder preserves stored value on save).
+- 17 i18n keys × 3 locales (en/vi/zh).
+
+**Docs**
+
+- New: `docs/git-credential-adapter.md` — user-facing guide (when to use PAT
+  vs SSH vs env, host-scope semantics, TOFU caveat with `ssh-keyscan`
+  mitigation, SIGKILL residual material note, operator sweep recipe).
+- New: `docs/credential-adapter-playbook.md` — implementer guide with worked
+  mappings for `kubectl`, `docker`, `npm`, `aws`, `psql` and the three-question
+  interface-validation gate.
+- `docs/09-security.md` § 14 — trust-boundary diagram, audit field schema,
+  SSH TOFU + SIGKILL caveats, v2 future-work list.
+- `docs/03-tools-system.md` § 8a — adapter framework summary linking to the
+  playbook.
+
+**Security**
+
+- User-paste denylist (`ValidateGrantEnvVars`) unchanged — first line of
+  defense intact. Adapter path is the second, audit-trailed line; a typo in
+  `adapter_name` falls back to passthrough (no silent bypass).
+- AES-256-GCM at rest for stored PAT/SSH bodies; secrets cannot be read back
+  via API/UI.
+- `ScrubCredentials` redacts PAT bytes and SSH key path from stdout, stderr,
+  `Result.Content`, and audit log JSON.
+
+**Known v1 limitations**
+
+- One credential per (user, binary, host_scope).
+- No multi-host wildcard (`*.github.com`).
+- No persistent `known_hosts` per credential (TOFU only).
+- No sandbox support (adapter is incompatible with bind-mount-based sandbox
+  path).
+- No credential-refresh primitive (blocks future `aws sts assume-role`
+  adapter).
+
+---
+
 ## 2026-05-27
 
 ### zuey VPS ops scripts: repo-tracked + CI auto-sync
