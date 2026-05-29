@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -39,6 +40,7 @@ type ChannelInstancesHandler struct {
 	msgBus          *bus.MessageBus
 	memberResolver  channels.MemberResolver // optional — enriches file_writer metadata on addwriter
 	channelMgr      *channels.Manager       // optional — enables ChannelDestroyer hook on delete
+	memoryService   *channelmemory.Service
 	mcpStore        store.MCPServerStore
 	secureCLIStore  store.SecureCLIStore
 	mcpContextStore store.MCPContextAdminStore
@@ -144,6 +146,20 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/channels/instances/{id}/contexts/{scopeType}/{scopeKey}/cli-credentials", h.adminAuth(h.handleListContextCLICredentials))
 	mux.HandleFunc("PUT /v1/channels/instances/{id}/contexts/{scopeType}/{scopeKey}/cli-credentials/{binaryID}", h.adminAuth(h.handleSetContextCLICredentials))
 	mux.HandleFunc("DELETE /v1/channels/instances/{id}/contexts/{scopeType}/{scopeKey}/cli-credentials/{binaryID}", h.adminAuth(h.handleDeleteContextCLICredentials))
+
+	if h.memoryService != nil {
+		mux.HandleFunc("GET /v1/channels/instances/{id}/memory-extraction", h.auth(h.handleMemoryExtractionStatus))
+		mux.HandleFunc("PUT /v1/channels/instances/{id}/memory-extraction/settings", h.adminAuth(h.handleMemoryExtractionSettings))
+		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/run", h.adminAuth(h.handleMemoryExtractionRun))
+		mux.HandleFunc("GET /v1/channels/instances/{id}/memory-extraction/items", h.auth(h.handleMemoryExtractionItems))
+		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve", h.adminAuth(h.handleMemoryExtractionApprove))
+		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject", h.adminAuth(h.handleMemoryExtractionReject))
+		mux.HandleFunc("DELETE /v1/channels/instances/{id}/memory-extraction/items/{itemID}", h.adminAuth(h.handleMemoryExtractionDelete))
+	}
+}
+
+func (h *ChannelInstancesHandler) SetMemoryExtractionService(svc *channelmemory.Service) {
+	h.memoryService = svc
 }
 
 func (h *ChannelInstancesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
