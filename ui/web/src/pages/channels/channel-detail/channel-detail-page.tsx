@@ -10,6 +10,7 @@ import { ChannelGeneralTab } from "./channel-general-tab";
 import { ChannelCredentialsTab } from "./channel-credentials-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
+import { ChannelContextsTab } from "./channel-contexts-tab";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useChannels } from "../hooks/use-channels";
@@ -30,7 +31,7 @@ interface ChannelDetailPageProps {
 }
 
 const DEFAULT_CHANNEL_DETAIL_TAB = "general";
-const baseChannelDetailTabs = new Set(["general", "credentials", "managers"]);
+const baseChannelDetailTabs = new Set(["general", "credentials", "contexts", "managers"]);
 
 export function resolveChannelDetailTab(
   requestedTab: string | null,
@@ -60,6 +61,9 @@ export function ChannelDetailPage({
     listManagers,
     addManager,
     removeManager,
+    listContexts,
+    listContextMembers,
+    listContextCapabilities,
   } = useChannelDetail(instanceId);
   const { agents } = useAgents();
   const { channels } = useChannels();
@@ -198,6 +202,9 @@ export function ChannelDetailPage({
                   {t("detail.tabs.groups")}
                 </TabsTrigger>
               )}
+              <TabsTrigger value="contexts">
+                {t("detail.tabs.contexts")}
+              </TabsTrigger>
               <TabsTrigger value="managers">
                 {t("detail.tabs.managers")}
               </TabsTrigger>
@@ -227,6 +234,14 @@ export function ChannelDetailPage({
                 />
               </TabsContent>
             )}
+
+            <TabsContent value="contexts" className="mt-4">
+              <ChannelContextsTab
+                listContexts={listContexts}
+                listContextMembers={listContextMembers}
+                listContextCapabilities={listContextCapabilities}
+              />
+            </TabsContent>
 
             <TabsContent value="managers" className="mt-4">
               <ChannelManagersTab

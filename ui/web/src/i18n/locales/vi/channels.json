@@ -118,6 +118,7 @@
       "config": "Cấu hình",
       "credentials": "Thông tin xác thực",
       "groups": "Nhóm",
+      "contexts": "Ngữ cảnh",
       "managers": "Quản lý"
     },
     "general": {
@@ -155,6 +156,27 @@
       "saved": "Đã lưu",
       "saveGroups": "Lưu nhóm",
       "saving": "Đang lưu..."
+    },
+    "contexts": {
+      "description": "Xem ngữ cảnh channel, thành viên đã lưu, MCP tools, Secure CLI tools và thông tin xác thực theo scope.",
+      "emptyTitle": "Không có ngữ cảnh",
+      "emptyHint": "Ngữ cảnh xuất hiện sau khi channel nhận tin nhắn hoặc metadata nhóm.",
+      "loading": "Đang tải chi tiết ngữ cảnh...",
+      "capabilities": "Quyền năng",
+      "members": "Thành viên",
+      "noCapabilities": "Không có quyền năng trong ngữ cảnh này.",
+      "noMembers": "Không có thành viên đã lưu trong ngữ cảnh này.",
+      "none": "Không có",
+      "allTools": "Tất cả tools",
+      "scopedCount": "{{count}} override theo scope",
+      "scopedCount_plural": "{{count}} override theo scope",
+      "columns": {
+        "name": "Tên",
+        "type": "Loại",
+        "source": "Nguồn",
+        "credentials": "Xác thực",
+        "tools": "Tools"
+      }
     },
     "timeline": {
       "title": "Dòng thời gian",

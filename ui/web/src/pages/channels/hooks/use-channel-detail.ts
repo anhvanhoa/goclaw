@@ -5,7 +5,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
 import { userFriendlyError } from "@/lib/error-utils";
-import type { ChannelInstanceData } from "@/types/channel";
+import type {
+  ChannelCapability,
+  ChannelContextData,
+  ChannelContextMember,
+  ChannelInstanceData,
+} from "@/types/channel";
 import type { ChannelContact } from "@/types/contact";
 
 export type { ChannelContact };
@@ -96,6 +101,36 @@ export function useChannelDetail(instanceId: string | undefined) {
     [instanceId, http],
   );
 
+  const listContexts = useCallback(async (): Promise<ChannelContextData[]> => {
+    if (!instanceId) return [];
+    const res = await http.get<{ contexts: ChannelContextData[] }>(
+      `/v1/channels/instances/${instanceId}/contexts`,
+    );
+    return res.contexts ?? [];
+  }, [instanceId, http]);
+
+  const listContextMembers = useCallback(
+    async (scopeType: string, scopeKey: string): Promise<ChannelContextMember[]> => {
+      if (!instanceId) return [];
+      const res = await http.get<{ members: ChannelContextMember[] }>(
+        `/v1/channels/instances/${instanceId}/contexts/${encodeURIComponent(scopeType)}/${encodeURIComponent(scopeKey)}/members`,
+      );
+      return res.members ?? [];
+    },
+    [instanceId, http],
+  );
+
+  const listContextCapabilities = useCallback(
+    async (scopeType: string, scopeKey: string): Promise<ChannelCapability[]> => {
+      if (!instanceId) return [];
+      const res = await http.get<{ capabilities: ChannelCapability[] }>(
+        `/v1/channels/instances/${instanceId}/contexts/${encodeURIComponent(scopeType)}/${encodeURIComponent(scopeKey)}/capabilities`,
+      );
+      return res.capabilities ?? [];
+    },
+    [instanceId, http],
+  );
+
   const listContacts = useCallback(
     async (search: string, channelType?: string): Promise<ChannelContact[]> => {
       const params: Record<string, string> = {};
@@ -116,6 +151,9 @@ export function useChannelDetail(instanceId: string | undefined) {
     listManagers,
     addManager,
     removeManager,
+    listContexts,
+    listContextMembers,
+    listContextCapabilities,
     listContacts,
     refresh: invalidate,
   };

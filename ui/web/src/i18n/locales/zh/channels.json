@@ -118,6 +118,7 @@
       "config": "配置",
       "credentials": "凭据",
       "groups": "群组",
+      "contexts": "上下文",
       "managers": "管理员"
     },
     "general": {
@@ -155,6 +156,27 @@
       "saved": "已保存",
       "saveGroups": "保存群组",
       "saving": "保存中..."
+    },
+    "contexts": {
+      "description": "查看 Channel 上下文、已存成员、MCP 工具、Secure CLI 工具和作用域凭据。",
+      "emptyTitle": "暂无上下文",
+      "emptyHint": "Channel 收到消息或群组元数据后会显示上下文。",
+      "loading": "正在加载上下文详情...",
+      "capabilities": "能力",
+      "members": "成员",
+      "noCapabilities": "此上下文没有可用能力。",
+      "noMembers": "此上下文没有已存成员。",
+      "none": "无",
+      "allTools": "全部工具",
+      "scopedCount": "{{count}} 个作用域覆盖",
+      "scopedCount_plural": "{{count}} 个作用域覆盖",
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "source": "来源",
+        "credentials": "凭据",
+        "tools": "工具"
+      }
     },
     "timeline": {
       "title": "时间线",

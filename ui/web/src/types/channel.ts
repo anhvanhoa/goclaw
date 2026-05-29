@@ -50,3 +50,37 @@ export interface ChannelInstanceInput {
   config?: Record<string, unknown>;
   enabled?: boolean;
 }
+
+export interface ChannelContextData {
+  scope_type: "channel" | "group" | "user" | "role";
+  scope_key: string;
+  label: string;
+  source: string;
+  live_members: boolean;
+  member_count?: number;
+  last_seen_at?: string;
+}
+
+export interface ChannelContextMember {
+  platform_id: string;
+  user_id?: string;
+  display_name?: string;
+  username?: string;
+  source: string;
+  last_seen_at?: string;
+}
+
+export interface ChannelCapability {
+  type: "mcp_server" | "secure_cli";
+  id: string;
+  name: string;
+  display_name?: string;
+  enabled: boolean;
+  source: string;
+  tool_allow?: string[];
+  tool_deny?: string[];
+  credential_source: string;
+  has_credential: boolean;
+  context_grant_configured: boolean;
+  context_credentials_configured: boolean;
+}

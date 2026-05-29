@@ -38,6 +38,11 @@ export const queryKeys = {
     all: ["channels"] as const,
     list: (params: Record<string, unknown>) => ["channels", params] as const,
     detail: (id: string) => ["channels", "detail", id] as const,
+    contexts: (id: string) => ["channels", "detail", id, "contexts"] as const,
+    contextMembers: (id: string, scopeType: string, scopeKey: string) =>
+      ["channels", "detail", id, "contexts", scopeType, scopeKey, "members"] as const,
+    contextCapabilities: (id: string, scopeType: string, scopeKey: string) =>
+      ["channels", "detail", id, "contexts", scopeType, scopeKey, "capabilities"] as const,
   },
   contacts: {
     all: ["contacts"] as const,
