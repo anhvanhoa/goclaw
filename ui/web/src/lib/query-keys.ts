@@ -38,6 +38,9 @@ export const queryKeys = {
     all: ["channels"] as const,
     list: (params: Record<string, unknown>) => ["channels", params] as const,
     detail: (id: string) => ["channels", "detail", id] as const,
+    memoryExtraction: (id: string) => ["channels", "detail", id, "memory-extraction"] as const,
+    memoryExtractionItems: (id: string, params: Record<string, unknown>) =>
+      ["channels", "detail", id, "memory-extraction", "items", params] as const,
     contexts: (id: string) => ["channels", "detail", id, "contexts"] as const,
     contextMembers: (id: string, scopeType: string, scopeKey: string) =>
       ["channels", "detail", id, "contexts", scopeType, scopeKey, "members"] as const,

@@ -12,6 +12,7 @@ import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
 import { ChannelContextsTab } from "./channel-contexts-tab";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
+import { PassiveMemorySection } from "./passive-memory-section";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useChannels } from "../hooks/use-channels";
 import { channelsWithAuth } from "../channel-wizard-registry";
@@ -192,6 +193,8 @@ export function ChannelDetailPage({
               <span className="text-muted-foreground">{neutralHealthNote}</span>
             </div>
           )}
+
+          <PassiveMemorySection instanceId={instance.id} />
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
