@@ -17,6 +17,7 @@ func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, meta
 // RegisterRunWithBehavior associates a run ID with channel context and
 // resolved delivery behavior so event handlers do not read mutable config mid-run.
 func (m *Manager) RegisterRunWithBehavior(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool, chatBehavior ResolvedChatBehavior) {
+	m.completedRuns.Delete(runID)
 	m.runs.Store(runID, &RunContext{
 		ChannelName:       channelName,
 		ChatID:            chatID,
@@ -37,6 +38,40 @@ func (m *Manager) UnregisterRun(runID string) {
 			m.cancelQuickAck(rc)
 		}
 	}
+	m.completedRuns.Delete(runID)
+}
+
+func (m *Manager) InterimDeliverySnapshot(runID string) (int, string) {
+	val, ok := m.runs.Load(runID)
+	if ok {
+		rc, ok := val.(*RunContext)
+		if !ok {
+			return 0, ""
+		}
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
+		return rc.interimDelivered, rc.lastInterimReply
+	}
+	if val, ok := m.completedRuns.Load(runID); ok {
+		if snapshot, ok := val.(interimDeliverySnapshot); ok {
+			return snapshot.delivered, snapshot.lastReply
+		}
+	}
+	return 0, ""
+}
+
+func (m *Manager) snapshotCompletedRun(runID string, rc *RunContext) {
+	rc.mu.Lock()
+	snapshot := interimDeliverySnapshot{
+		delivered: rc.interimDelivered,
+		lastReply: rc.lastInterimReply,
+	}
+	rc.mu.Unlock()
+	if snapshot.delivered == 0 && snapshot.lastReply == "" {
+		m.completedRuns.Delete(runID)
+		return
+	}
+	m.completedRuns.Store(runID, snapshot)
 }
 
 // IsStreamingChannel checks if a named channel implements StreamingChannel

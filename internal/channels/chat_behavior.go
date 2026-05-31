@@ -174,6 +174,13 @@ func ShouldDeliverGeneratedProgress(behavior ResolvedChatBehavior, streaming boo
 		effectiveQuickAckMode(behavior.QuickAck.Mode) == QuickAckModeLLMGenerated
 }
 
+func ShouldSuppressInitialBlockReply(behavior ResolvedChatBehavior, streaming bool) bool {
+	if streaming || !behavior.Enabled {
+		return false
+	}
+	return !behavior.QuickAck.Enabled || effectiveQuickAckMode(behavior.QuickAck.Mode) == QuickAckModeOff
+}
+
 func normalizeQuickAckMode(mode string) string {
 	switch strings.TrimSpace(mode) {
 	case QuickAckModeFixedTemplate:

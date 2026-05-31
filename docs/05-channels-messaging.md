@@ -78,7 +78,7 @@ Normal channel messages pass through the shared inbound debouncer before agent e
 - `quick_ack.mode = "llm_generated"` uses the existing main-turn `block.reply` event as the natural progress response for non-streaming channel runs. It does not make a separate LLM call.
 - `quick_ack.templates` are fallback messages. In generated mode, the first template is sent only if no generated `block.reply` arrives before `quick_ack.min_delay_ms`.
 - `quick_ack.mode = "fixed_template"` preserves the older fixed-template acknowledgement behavior.
-- `quick_ack.mode = "off"` disables chat-behavior quick acknowledgement without disabling explicit `gateway.block_reply`.
+- `quick_ack.mode = "off"` disables chat-behavior quick acknowledgement. When explicit `gateway.block_reply` is on, the first pre-tool `block.reply` is treated as the immediate acknowledgement and suppressed; later tool-iteration `block.reply` messages can still be delivered as intermediate replies.
 - `final_split` splits long final text replies into a bounded number of paragraph messages.
 - Per-channel `chat_behavior` overrides inherit the gateway config unless a field is explicitly set.
 

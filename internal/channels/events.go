@@ -280,18 +280,28 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		}
 		rc.mu.Lock()
 		streaming := rc.Streaming
+		rc.blockReplySeen++
+		isInitialBlockReply := rc.blockReplySeen == 1
+		blockReplyEnabled := rc.BlockReplyEnabled
+		chatBehavior := rc.ChatBehavior
 		rc.mu.Unlock()
 
 		if streaming {
 			return // streaming already delivered via chunks
 		}
-		if !rc.BlockReplyEnabled && !ShouldDeliverGeneratedProgress(rc.ChatBehavior, streaming) {
+		generatedProgress := ShouldDeliverGeneratedProgress(chatBehavior, streaming)
+		if !blockReplyEnabled && !generatedProgress {
+			return
+		}
+		if isInitialBlockReply && blockReplyEnabled && !generatedProgress && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
 			return
 		}
 
 		m.cancelQuickAck(rc)
 		rc.mu.Lock()
 		rc.blockReplySent = true
+		rc.interimDelivered++
+		rc.lastInterimReply = content
 		rc.mu.Unlock()
 
 		// Build outbound metadata: copy routing fields but strip reply_to_message_id
@@ -365,6 +375,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	// Clean up on terminal events
 	if eventType == protocol.AgentEventRunCompleted || eventType == protocol.AgentEventRunFailed || eventType == protocol.AgentEventRunCancelled {
 		m.cancelQuickAck(rc)
+		m.snapshotCompletedRun(runID, rc)
 		m.runs.Delete(runID)
 	}
 }

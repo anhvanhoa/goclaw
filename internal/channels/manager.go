@@ -43,6 +43,9 @@ type RunContext struct {
 	ackSent           bool
 	ackCancelled      bool
 	blockReplySent    bool
+	blockReplySeen    int
+	interimDelivered  int
+	lastInterimReply  string
 	streamBuffer      string        // accumulated streaming text (chunks are deltas)
 	inToolPhase       bool          // true after tool.call, reset on next chunk (new LLM iteration)
 	stream            ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)
@@ -52,6 +55,11 @@ type RunContext struct {
 	tagParseSkipped   bool          // true after first chunk with no <think> tags (skip re-parsing)
 }
 
+type interimDeliverySnapshot struct {
+	delivered int
+	lastReply string
+}
+
 // Manager manages all registered channels, handling their lifecycle
 // and routing outbound messages to the correct channel.
 type Manager struct {
@@ -59,6 +67,7 @@ type Manager struct {
 	health           map[string]ChannelHealth
 	bus              *bus.MessageBus
 	runs             sync.Map // runID string → *RunContext
+	completedRuns    sync.Map // runID string → interimDeliverySnapshot
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector

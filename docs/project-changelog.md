@@ -6,6 +6,24 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-05-31
 
+### Channel intermediate reply gating
+
+**Fixes**
+
+- Quick acknowledgement off now suppresses the first pre-tool `block.reply`
+  even when explicit `gateway.block_reply` is enabled, so the initial
+  acknowledgement does not leak through the Intermediate Replies path.
+- Final reply dedup now uses channel-delivered interim state instead of raw
+  pipeline `block.reply` emit counts, avoiding false suppression when an
+  interim event was skipped.
+
+**Tests**
+
+- Added channel event coverage for quick acknowledgement disabled and
+  `quick_ack.mode = "off"` with explicit intermediate replies enabled.
+
+---
+
 ### Agent-scoped git credentials (issue #117)
 
 **New**
