@@ -278,6 +278,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		if content == "" {
 			return
 		}
+		source := extractPayloadString(payload, "source")
 		rc.mu.Lock()
 		streaming := rc.Streaming
 		rc.blockReplySeen++
@@ -293,7 +294,8 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		if !blockReplyEnabled && !generatedProgress {
 			return
 		}
-		if isInitialBlockReply && blockReplyEnabled && !generatedProgress && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
+		isToolAnnouncement := source == protocol.BlockReplySourceToolAnnouncement
+		if isInitialBlockReply && !isToolAnnouncement && blockReplyEnabled && !generatedProgress && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
 			return
 		}
 

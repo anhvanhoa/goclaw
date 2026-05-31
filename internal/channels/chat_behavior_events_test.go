@@ -272,3 +272,52 @@ func TestHandleAgentEvent_QuickAckDisabledSuppressesInitialExplicitBlockReply(t 
 		})
 	}
 }
+
+func TestHandleAgentEvent_ToolAnnouncementBypassesInitialQuickAckSuppression(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		quick ResolvedQuickAckConfig
+	}{
+		{
+			name:  "enabled_false",
+			quick: ResolvedQuickAckConfig{Enabled: false, Templates: []string{"Fallback."}},
+		},
+		{
+			name:  "mode_off",
+			quick: ResolvedQuickAckConfig{Enabled: true, Mode: QuickAckModeOff, Templates: []string{"Fallback."}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			behavior := ResolvedChatBehavior{
+				Enabled:  true,
+				QuickAck: tc.quick,
+			}
+
+			mb := bus.New()
+			mgr := NewManager(mb)
+			mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+			mgr.RegisterRunWithBehavior("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, true, true, behavior)
+
+			mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+			mgr.HandleAgentEvent(protocol.AgentEventBlockReply, "run-1", map[string]string{
+				"content": "Tôi sẽ dùng `skill_search` để xử lý bước tiếp theo.",
+				"source":  protocol.BlockReplySourceToolAnnouncement,
+			})
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			got, ok := mb.SubscribeOutbound(ctx)
+			if !ok {
+				t.Fatal("expected tool announcement outbound message")
+			}
+			if got.Content != "Tôi sẽ dùng `skill_search` để xử lý bước tiếp theo." {
+				t.Fatalf("tool announcement content = %q", got.Content)
+			}
+
+			delivered, last := mgr.InterimDeliverySnapshot("run-1")
+			if delivered != 1 || last != got.Content {
+				t.Fatalf("interim delivery snapshot = (%d, %q), want delivered announcement", delivered, last)
+			}
+		})
+	}
+}

@@ -6,6 +6,24 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-05-31
 
+### Tool-call announcements
+
+**Fixes**
+
+- Intermediate Replies now guarantees a pre-tool announcement when the model
+  requests tools without assistant text, or with text that does not name the
+  tools. The fallback uses sanitized tool names only and is tagged as
+  `tool_announcement`.
+- Quick acknowledgement off still suppresses generic first acknowledgements,
+  but no longer suppresses explicit tool announcements.
+
+**Tests**
+
+- Added pipeline coverage for empty-content tool calls and channel coverage for
+  `tool_announcement` delivery when Quick acknowledgement is off.
+
+---
+
 ### Channel intermediate reply gating
 
 **Fixes**

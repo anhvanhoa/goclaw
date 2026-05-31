@@ -17,7 +17,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // --- shared test helpers ---
@@ -120,6 +122,110 @@ func TestThinkStage_WithToolCalls_ReturnsContinue(t *testing.T) {
 	}
 	if len(state.Think.LastResponse.ToolCalls) != 1 {
 		t.Errorf("ToolCalls len = %d, want 1", len(state.Think.LastResponse.ToolCalls))
+	}
+}
+
+func TestThinkStage_EmptyToolCallContent_EmitsToolAnnouncement(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				FinishReason: "tool_calls",
+				ToolCalls: []providers.ToolCall{{
+					ID:        "tc1",
+					Name:      "search\n`secret`",
+					Arguments: map[string]any{"api_key": "must-not-leak"},
+				}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("block reply source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
+	}
+	if !strings.Contains(gotContent, "search secret") {
+		t.Fatalf("announcement content = %q, want sanitized tool name", gotContent)
+	}
+	if strings.Contains(gotContent, "must-not-leak") || strings.Contains(gotContent, "api_key") {
+		t.Fatalf("announcement leaked tool arguments: %q", gotContent)
+	}
+}
+
+func TestThinkStage_GeneratedToolCallContent_AppendsMissingToolAnnouncement(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      "Tôi sẽ tìm trong kho kỹ năng trước.",
+				FinishReason: "tool_calls",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "skill_search"}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	ctx := store.WithLocale(context.Background(), "vi")
+
+	err := stage.Execute(ctx, state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := "Tôi sẽ tìm trong kho kỹ năng trước.\n\nTôi sẽ dùng `skill_search` để xử lý bước tiếp theo."
+	if gotContent != want {
+		t.Fatalf("block reply content = %q", gotContent)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("block reply source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
+	}
+}
+
+func TestThinkStage_GeneratedToolCallContent_DoesNotDuplicateNamedTool(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      "Tôi sẽ dùng `skill_search` để tìm capability phù hợp trước.",
+				FinishReason: "tool_calls",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "skill_search"}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotContent != "Tôi sẽ dùng `skill_search` để tìm capability phù hợp trước." {
+		t.Fatalf("block reply content = %q", gotContent)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("block reply source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
 	}
 }
 
