@@ -247,7 +247,7 @@ jobs:
           gh release upload "$TAG" artifacts/* --clobber
 
   complete_release_artifacts:
-    needs: [beta_version, publish_release, build_zuey_binary, build_remaining_binaries]
+    needs: [beta_version, publish_release, build_zuey_binary, build_remaining_binaries, deploy_zuey_beta]
     if: needs.beta_version.outputs.released == 'true'
     runs-on: ubuntu-latest
     permissions:

@@ -6,6 +6,19 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-05-31
 
+### CI/CD: zuey release asset race fix
+
+**Fixes**
+
+- Made release artifact completion wait for zuey beta deploy before refreshing GitHub Release assets with `--clobber`.
+- Prevents the VPS upgrade script from seeing `linux amd64 release asset not found` while another workflow job is replacing the same asset.
+
+**Tests**
+
+- Updated the dev beta workflow structure test to lock the deploy-before-completion dependency.
+
+---
+
 ### CI/CD: fast zuey beta deploy (issue #88)
 
 **Changes**

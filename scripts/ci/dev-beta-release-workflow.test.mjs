@@ -45,7 +45,7 @@ test("dev beta workflow publishes zuey amd64 asset before completing all release
   assert.match(remainingBinaries, /name: binary-\$\{\{ matrix\.goos \}\}-\$\{\{ matrix\.goarch \}\}/);
 
   const completion = jobBlock("complete_release_artifacts");
-  assert.match(completion, /needs: \[beta_version, publish_release, build_zuey_binary, build_remaining_binaries\]/);
+  assert.match(completion, /needs: \[beta_version, publish_release, build_zuey_binary, build_remaining_binaries, deploy_zuey_beta\]/);
   assert.match(completion, /pattern: binary-\*/);
   assert.match(completion, /sha256sum goclaw-\*\.tar\.gz > CHECKSUMS\.sha256/);
 });
