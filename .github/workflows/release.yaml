@@ -195,13 +195,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.DOCKERHUB_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
           build-args: |
             ENABLE_OTEL=false
             ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
@@ -280,18 +286,28 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          # Compose -t flags from metadata-action tags (newline-separated)
-          TAG_ARGS=()
+          # Compose -t flags from metadata-action tags (newline-separated).
+          GHCR_IMAGE="${{ env.GHCR_IMAGE }}"
+          DOCKERHUB_IMAGE="${{ env.DOCKERHUB_IMAGE }}"
+          GHCR_TAG_ARGS=()
+          DOCKERHUB_TAG_ARGS=()
           while IFS= read -r tag; do
-            [ -n "$tag" ] && TAG_ARGS+=("-t" "$tag")
+            if [[ "$tag" == "$GHCR_IMAGE:"* ]]; then
+              GHCR_TAG_ARGS+=("-t" "$tag")
+            elif [[ "$tag" == "$DOCKERHUB_IMAGE:"* ]]; then
+              DOCKERHUB_TAG_ARGS+=("-t" "$tag")
+            fi
           done <<< "${{ steps.meta.outputs.tags }}"
-          # Compose source digest refs (pushed to GHCR by docker-build)
-          DIGEST_ARGS=()
+          # Compose source digest refs pushed to each registry by docker-build.
+          GHCR_DIGEST_ARGS=()
+          DOCKERHUB_DIGEST_ARGS=()
           for f in *; do
-            DIGEST_ARGS+=("${{ env.GHCR_IMAGE }}@sha256:$f")
+            GHCR_DIGEST_ARGS+=("$GHCR_IMAGE@sha256:$f")
+            DOCKERHUB_DIGEST_ARGS+=("$DOCKERHUB_IMAGE@sha256:$f")
           done
           set -x
-          docker buildx imagetools create "${TAG_ARGS[@]}" "${DIGEST_ARGS[@]}"
+          docker buildx imagetools create "${GHCR_TAG_ARGS[@]}" "${GHCR_DIGEST_ARGS[@]}"
+          docker buildx imagetools create "${DOCKERHUB_TAG_ARGS[@]}" "${DOCKERHUB_DIGEST_ARGS[@]}"
 
       - name: Inspect manifest
         run: |
@@ -327,13 +343,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
         with:
           context: ui/web
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.GHCR_IMAGE }}-web,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }}-web,${{ env.DOCKERHUB_IMAGE }}-web",push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=web-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=web-${{ matrix.arch }}
           provenance: false
@@ -393,16 +415,26 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          TAG_ARGS=()
+          GHCR_IMAGE="${{ env.GHCR_IMAGE }}-web"
+          DOCKERHUB_IMAGE="${{ env.DOCKERHUB_IMAGE }}-web"
+          GHCR_TAG_ARGS=()
+          DOCKERHUB_TAG_ARGS=()
           while IFS= read -r tag; do
-            [ -n "$tag" ] && TAG_ARGS+=("-t" "$tag")
+            if [[ "$tag" == "$GHCR_IMAGE:"* ]]; then
+              GHCR_TAG_ARGS+=("-t" "$tag")
+            elif [[ "$tag" == "$DOCKERHUB_IMAGE:"* ]]; then
+              DOCKERHUB_TAG_ARGS+=("-t" "$tag")
+            fi
           done <<< "${{ steps.meta.outputs.tags }}"
-          DIGEST_ARGS=()
+          GHCR_DIGEST_ARGS=()
+          DOCKERHUB_DIGEST_ARGS=()
           for f in *; do
-            DIGEST_ARGS+=("${{ env.GHCR_IMAGE }}-web@sha256:$f")
+            GHCR_DIGEST_ARGS+=("$GHCR_IMAGE@sha256:$f")
+            DOCKERHUB_DIGEST_ARGS+=("$DOCKERHUB_IMAGE@sha256:$f")
           done
           set -x
-          docker buildx imagetools create "${TAG_ARGS[@]}" "${DIGEST_ARGS[@]}"
+          docker buildx imagetools create "${GHCR_TAG_ARGS[@]}" "${GHCR_DIGEST_ARGS[@]}"
+          docker buildx imagetools create "${DOCKERHUB_TAG_ARGS[@]}" "${DOCKERHUB_DIGEST_ARGS[@]}"
 
       - name: Inspect manifest
         run: |
