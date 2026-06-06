@@ -121,6 +121,14 @@ type ImageContent struct {
 	Partial  bool   `json:"partial,omitempty"` // true for intermediate frames (Codex image_generation_call)
 }
 
+// VideoContent represents a video (either base64-encoded or a direct URL) for video-capable models.
+type VideoContent struct {
+	MimeType string `json:"mime_type"`         // e.g. "video/mp4"
+	Data     string `json:"data"`              // base64-encoded video bytes
+	URL      string `json:"url,omitempty"`     // URL of the video
+	Partial  bool   `json:"partial,omitempty"` // true for intermediate frames
+}
+
 // MediaRef is a lightweight reference to a persistently stored media file.
 // Stored in session JSONB (~60 bytes each) instead of megabytes for base64.
 // On reload, MediaRefs are resolved to file paths and loaded into Images (for images).
@@ -138,6 +146,7 @@ type Message struct {
 	Content    string         `json:"content"`
 	Thinking   string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
 	Images     []ImageContent `json:"-"`                    // vision: base64 images (runtime only, never persisted to DB)
+	Videos     []VideoContent `json:"-"`                    // vision: base64 videos (runtime only, never persisted to DB)
 	MediaRefs  []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
 	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses

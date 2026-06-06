@@ -60,15 +60,20 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 
 // callProvider dispatches video analysis to the appropriate provider API.
 // Gemini: uses File API (upload → poll → file_data in generateContent).
-// Others: falls back to base64 in image_url (OpenRouter routes to Gemini which handles video).
+// Others: falls back to base64 or URL in image_url (OpenRouter routes to Gemini which handles video).
 func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
 	prompt := GetParamString(params, "prompt", "Analyze this video and describe its contents.")
 	data, _ := params["data"].([]byte)
+	videoURL, _ := params["url"].(string)
 	mime := GetParamString(params, "mime", "video/mp4")
 
 	// Gemini: use File API (requires credentials).
 	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
 	if cp != nil && ptype == "gemini" {
+		if videoURL != "" {
+			return nil, nil, fmt.Errorf("provider %q does not support analyzing videos directly from a URL", providerName)
+		}
+
 		slog.Info("read_video: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
 		chatReq := providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt}},
@@ -89,19 +94,27 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 		return []byte(resp.Content), resp.Usage, nil
 	}
 
-	// Other providers: try standard Chat API with base64 as image_url (best effort).
+	// Other providers: try standard Chat API with base64 or URL as video_url (best effort).
 	p, err := t.registry.Get(ctx, providerName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider %q not available: %w", providerName, err)
 	}
 
-	slog.Info("read_video: using chat API fallback", "provider", providerName, "model", model, "size", len(data))
+	var vidContent providers.VideoContent
+	if videoURL != "" {
+		slog.Info("read_video: using chat API with direct video URL", "provider", providerName, "model", model, "url", videoURL)
+		vidContent = providers.VideoContent{MimeType: mime, URL: videoURL}
+	} else {
+		slog.Info("read_video: using chat API fallback with base64", "provider", providerName, "model", model, "size", len(data))
+		vidContent = providers.VideoContent{MimeType: mime, Data: base64.StdEncoding.EncodeToString(data)}
+	}
+
 	chatReq := providers.ChatRequest{
 		Messages: []providers.Message{
 			{
 				Role:    "user",
 				Content: prompt,
-				Images:  []providers.ImageContent{{MimeType: mime, Data: base64.StdEncoding.EncodeToString(data)}},
+				Videos:  []providers.VideoContent{vidContent},
 			},
 		},
 		Model: model,

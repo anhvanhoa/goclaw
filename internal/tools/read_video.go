@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -77,6 +78,10 @@ func (t *ReadVideoTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional: specific media_id from <media:video> tag. If omitted, uses most recent video.",
 			},
+			"url": map[string]any{
+				"type":        "string",
+				"description": "Optional URL to a video file. Use this to analyze videos hosted online.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -88,21 +93,39 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 		prompt = "Analyze this video and describe its contents."
 	}
 	mediaID, _ := args["media_id"].(string)
+	videoURL, _ := args["url"].(string)
 
-	videoPath, videoMime, err := t.resolveVideoFile(ctx, mediaID)
-	if err != nil {
-		return ErrorResult(err.Error())
+	if mediaID != "" && videoURL != "" {
+		return ErrorResult("Both 'media_id' and 'url' parameters cannot be specified. Choose only one.")
 	}
 
-	slog.Info("read_video: resolved file", "path", videoPath, "mime", videoMime, "media_id", mediaID)
+	var data []byte
+	var videoMime string
 
-	data, err := os.ReadFile(videoPath)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to read video file: %v", err))
-	}
-	slog.Info("read_video: file loaded", "size_bytes", len(data))
-	if len(data) > videoMaxBytes {
-		return ErrorResult(fmt.Sprintf("Video too large: %d bytes (max %d)", len(data), videoMaxBytes))
+	if videoURL != "" {
+		// Infer MIME type from URL extension
+		ext := filepath.Ext(videoURL)
+		if idx := strings.Index(ext, "?"); idx != -1 {
+			ext = ext[:idx]
+		}
+		videoMime = mimeFromVideoExt(ext)
+	} else {
+		videoPath, mime, err := t.resolveVideoFile(ctx, mediaID)
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		videoMime = mime
+		slog.Info("read_video: resolved file", "path", videoPath, "mime", videoMime, "media_id", mediaID)
+
+		fileData, err := os.ReadFile(videoPath)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to read video file: %v", err))
+		}
+		slog.Info("read_video: file loaded", "size_bytes", len(fileData))
+		if len(fileData) > videoMaxBytes {
+			return ErrorResult(fmt.Sprintf("Video too large: %d bytes (max %d)", len(fileData), videoMaxBytes))
+		}
+		data = fileData
 	}
 
 	chain := ResolveMediaProviderChain(ctx, "read_video", "", "",
@@ -114,6 +137,7 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 		}
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["data"] = data
+		chain[i].Params["url"] = videoURL
 		chain[i].Params["mime"] = videoMime
 	}
 

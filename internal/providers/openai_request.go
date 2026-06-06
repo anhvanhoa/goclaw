@@ -64,9 +64,9 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 		// Include content; omit empty content for assistant messages with tool_calls
 		// (Gemini rejects empty content → "must include at least one parts field").
-		if m.Role == "user" && len(m.Images) > 0 {
+		if m.Role == "user" && (len(m.Images) > 0 || len(m.Videos) > 0) {
 			var parts []map[string]any
-			// Text before images — Together / Qwen vision examples use this order; OpenAI accepts both.
+			// Text before images/videos — Together / Qwen vision examples use this order; OpenAI accepts both.
 			if m.Content != "" {
 				parts = append(parts, map[string]any{
 					"type": "text",
@@ -81,6 +81,18 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 				parts = append(parts, map[string]any{
 					"type": "image_url",
 					"image_url": map[string]any{
+						"url": urlVal,
+					},
+				})
+			}
+			for _, vid := range m.Videos {
+				urlVal := vid.URL
+				if urlVal == "" {
+					urlVal = fmt.Sprintf("data:%s;base64,%s", vid.MimeType, vid.Data)
+				}
+				parts = append(parts, map[string]any{
+					"type": "video_url",
+					"video_url": map[string]any{
 						"url": urlVal,
 					},
 				})
