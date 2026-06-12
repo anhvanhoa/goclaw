@@ -18,7 +18,7 @@ type nativeImageProvider struct {
 }
 
 func (p *nativeImageProvider) Name() string         { return p.name }
-func (p *nativeImageProvider) DefaultModel() string  { return p.model }
+func (p *nativeImageProvider) DefaultModel() string { return p.model }
 func (p *nativeImageProvider) Chat(_ context.Context, _ providers.ChatRequest) (*providers.ChatResponse, error) {
 	return &providers.ChatResponse{}, nil
 }
@@ -252,6 +252,84 @@ func TestCreateImageTool_ThreadsImageModel(t *testing.T) {
 			gotImageModel := fakeProvider.calledWith.ImageModel
 			if gotImageModel != tc.wantImageModel {
 				t.Errorf("NativeImageRequest.ImageModel = %q, want %q", gotImageModel, tc.wantImageModel)
+			}
+		})
+	}
+}
+
+func TestCreateImageTool_ThreadsOutputFormat(t *testing.T) {
+	pngMagic := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x00,
+		0x49, 0x45, 0x4e, 0x44,
+		0xae, 0x42, 0x60, 0x82,
+	}
+
+	tests := []struct {
+		name       string
+		args       map[string]any
+		wantFormat string
+	}{
+		{
+			name: "default",
+			args: map[string]any{
+				"prompt": "test image",
+			},
+			wantFormat: "png",
+		},
+		{
+			name: "output_format webp",
+			args: map[string]any{
+				"prompt":        "test image",
+				"output_format": "webp",
+			},
+			wantFormat: "webp",
+		},
+		{
+			name: "response_format alias jpeg",
+			args: map[string]any{
+				"prompt":          "test image",
+				"response_format": "jpeg",
+			},
+			wantFormat: "jpg",
+		},
+		{
+			name: "unsupported falls back to png",
+			args: map[string]any{
+				"prompt":        "test image",
+				"output_format": "gif",
+			},
+			wantFormat: "png",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeProvider := &nativeImageProvider{
+				name:       "openai-codex",
+				model:      "gpt-image-2",
+				returnData: pngMagic,
+			}
+
+			reg := providers.NewRegistry(nil)
+			reg.Register(fakeProvider)
+
+			chainJSON := []byte(`{"providers":[{"provider":"openai-codex","model":"gpt-image-2","enabled":true,"timeout":30,"max_retries":1}]}`)
+			settings := BuiltinToolSettings{"create_image": chainJSON}
+			ctx := WithBuiltinToolSettings(context.Background(), settings)
+			ctx = WithToolWorkspace(ctx, t.TempDir())
+
+			tool := NewCreateImageTool(reg)
+			result := tool.Execute(ctx, tc.args)
+			if result.IsError {
+				t.Fatalf("Execute returned error: %q", result.ForLLM)
+			}
+
+			if fakeProvider.calledWith == nil {
+				t.Fatal("GenerateImage was not called on the native provider")
+			}
+			if fakeProvider.calledWith.OutputFormat != tc.wantFormat {
+				t.Errorf("NativeImageRequest.OutputFormat = %q, want %q", fakeProvider.calledWith.OutputFormat, tc.wantFormat)
 			}
 		})
 	}

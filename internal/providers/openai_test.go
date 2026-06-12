@@ -62,6 +62,13 @@ func TestBuildRequestBody_TemperatureSkippedForReasoningModels(t *testing.T) {
 		"gpt-5-mini",
 		"gpt-5-mini-2025-01",
 		"gpt-5-nano",
+		"gpt-5.4-mini",
+		"gpt-5-codex",
+		"gpt-5-codex-mini",
+		"gpt-5.1-codex",
+		"gpt-5.1-codex-mini",
+		"gpt-5.1-codex-max",
+		"gpt-5.3-codex-spark",
 		"o1",
 		"o1-mini",
 		"o1-preview",
@@ -69,6 +76,7 @@ func TestBuildRequestBody_TemperatureSkippedForReasoningModels(t *testing.T) {
 		"o3-mini",
 		"o4-mini",
 		"openai/gpt-5-mini",
+		"openai/gpt-5.4-mini",
 		"openai/o3-mini",
 	}
 

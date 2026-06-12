@@ -71,6 +71,11 @@ func (t *CreateImageTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Short descriptive filename (no extension). Example: 'sunset-beach', 'company-logo'.",
 			},
+			"output_format": map[string]any{
+				"type":        "string",
+				"enum":        []string{"png", "jpg", "jpeg", "webp"},
+				"description": "Output image format for native image-generation providers. Defaults to png.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -86,6 +91,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		aspectRatio = "1:1"
 	}
 	filenameHint, _ := args["filename_hint"].(string)
+	outputFormat := normalizeImageOutputFormat(GetParamString(args, "output_format", GetParamString(args, "response_format", "png")))
 
 	chain := ResolveMediaProviderChain(ctx, "create_image", "", "",
 		imageGenProviderPriority, imageGenModelDefaults, t.registry)
@@ -97,6 +103,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		}
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["aspect_ratio"] = aspectRatio
+		chain[i].Params["output_format"] = outputFormat
 	}
 
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)
@@ -173,12 +180,13 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 			prompt := GetParamString(params, "prompt", "")
 			aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
 			imageModel := GetParamString(params, "image_model", "")
+			outputFormat := normalizeImageOutputFormat(GetParamString(params, "output_format", GetParamString(params, "response_format", "png")))
 			result, err := np.GenerateImage(ctx, providers.NativeImageRequest{
 				Model:        model,
 				ImageModel:   imageModel,
 				Prompt:       prompt,
 				AspectRatio:  aspectRatio,
-				OutputFormat: "png",
+				OutputFormat: outputFormat,
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("native image generation: %w", err)
@@ -262,10 +270,12 @@ func (t *CreateImageTool) callImageGenAPI(ctx context.Context, apiKey, apiBase, 
 // callStandardImageGenAPI uses the /images/generations endpoint (OpenAI and compatible providers).
 func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, apiBase, model, prompt string, params map[string]any) ([]byte, *providers.Usage, error) {
 	body := map[string]any{
-		"model":           model,
-		"prompt":          prompt,
-		"n":               1,
-		"response_format": "b64_json",
+		"model":  model,
+		"prompt": prompt,
+		"n":      1,
+	}
+	if isGPTImageModel(model) {
+		body["output_format"] = normalizeImageOutputFormat(GetParamString(params, "output_format", "png"))
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -299,21 +309,32 @@ func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, a
 	var imgResp struct {
 		Data []struct {
 			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(respBody, &imgResp); err != nil {
 		return nil, nil, fmt.Errorf("parse response: %w", err)
 	}
-	if len(imgResp.Data) == 0 || imgResp.Data[0].B64JSON == "" {
+	if len(imgResp.Data) == 0 {
 		return nil, nil, fmt.Errorf("no image data in response")
 	}
 
-	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode base64: %w", err)
+	if imgResp.Data[0].B64JSON != "" {
+		imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode base64: %w", err)
+		}
+		return imageBytes, nil, nil
+	}
+	if imgResp.Data[0].URL != "" {
+		imageBytes, err := downloadGeneratedImage(ctx, imgResp.Data[0].URL)
+		if err != nil {
+			return nil, nil, err
+		}
+		return imageBytes, nil, nil
 	}
 
-	return imageBytes, nil, nil
+	return nil, nil, fmt.Errorf("no image data in response")
 }
 
 // callGeminiNativeImageGen uses the native Gemini generateContent API with responseModalities.
@@ -487,6 +508,54 @@ func convertUsage(u *struct {
 		CompletionTokens: u.CompletionTokens,
 		TotalTokens:      u.TotalTokens,
 	}
+}
+
+func normalizeImageOutputFormat(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "jpg", "jpeg":
+		return "jpg"
+	case "webp":
+		return "webp"
+	default:
+		return "png"
+	}
+}
+
+func isGPTImageModel(model string) bool {
+	return strings.HasPrefix(imageModelFamily(model), "gpt-image")
+}
+
+func imageModelFamily(model string) string {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if idx := strings.LastIndex(model, "/"); idx >= 0 && idx < len(model)-1 {
+		return model[idx+1:]
+	}
+	return model
+}
+
+func downloadGeneratedImage(ctx context.Context, rawURL string) ([]byte, error) {
+	lower := strings.ToLower(strings.TrimSpace(rawURL))
+	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
+		return nil, fmt.Errorf("unsupported image URL scheme")
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create image download request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download image URL: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("download image URL: HTTP %d: %s", resp.StatusCode, truncateBytes(body, 300))
+	}
+	data, err := limitedReadAll(resp.Body, maxMediaDownloadBytes)
+	if err != nil {
+		return nil, fmt.Errorf("download image URL: %w", err)
+	}
+	return data, nil
 }
 
 func truncateBytes(b []byte, max int) string {
