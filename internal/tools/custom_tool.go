@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -52,12 +53,26 @@ func (t *CustomTool) Execute(ctx context.Context, args map[string]any) *Result {
 	tctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 
+	// Expand {{.key}} placeholders in the command template with actual arg values.
+	expandedCmd := t.command
+	if strings.Contains(t.command, "{{") {
+		tmpl, err := template.New("cmd").Option("missingkey=zero").Parse(t.command)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("invalid command template: %v", err))
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, args); err != nil {
+			return ErrorResult(fmt.Sprintf("command template execution failed: %v", err))
+		}
+		expandedCmd = buf.String()
+	}
+
 	// Route through the platform shell so the command can contain pipes and redirections.
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(tctx, "cmd", "/C", t.command)
+		cmd = exec.CommandContext(tctx, "cmd", "/C", expandedCmd)
 	} else {
-		cmd = exec.CommandContext(tctx, "sh", "-c", t.command)
+		cmd = exec.CommandContext(tctx, "sh", "-c", expandedCmd)
 	}
 	if t.workingDir != "" {
 		cmd.Dir = t.workingDir
