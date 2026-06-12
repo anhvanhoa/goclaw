@@ -41,6 +41,11 @@ func TestResolveGatewayClientOverrides(t *testing.T) {
 	if got := resolveGatewayBaseURL(); got != "http://remote.example.com:18790" {
 		t.Fatalf("resolveGatewayBaseURL() = %q, want normalized env URL", got)
 	}
+
+	t.Setenv("GOCLAW_SERVER", "http://127.0.0.1:19999/")
+	if got := resolveGatewayBaseURL(); got != "http://127.0.0.1:19999" {
+		t.Fatalf("resolveGatewayBaseURL() = %q, want trimmed GOCLAW_SERVER URL", got)
+	}
 }
 
 func TestGatewayHTTPDoRawUsesServerAndTokenOverride(t *testing.T) {

@@ -426,7 +426,7 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 
 	// Step 4: Register credential values for output scrubbing
 	for _, v := range envMap {
-		AddCredentialScrubValues(v)
+		AddScrubValuesCtx(ctx, v)
 	}
 
 	// Step 5: Resolve binary to absolute path and verify against config

@@ -33,6 +33,11 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
 		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
 		agentsH.SetDataDir(dataDir)
+		if stores.SecureCLI != nil && stores.SecureCLIGrants != nil {
+			if agentCreds, ok := stores.SecureCLI.(store.SecureCLIAgentCredentialStore); ok {
+				agentsH.SetGatewayOperatorBootstrap(stores.SecureCLI, stores.SecureCLIGrants, agentCreds, gatewayAddr)
+			}
+		}
 	}
 
 	if stores != nil && stores.Skills != nil {

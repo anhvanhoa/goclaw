@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "invalid updates",
 
 		// Agent
-		MsgAgentNotFound:       "agent not found: %s",
-		MsgCannotDeleteDefault: "cannot delete the default agent",
-		MsgUserCtxRequired:     "user context required",
+		MsgAgentNotFound:                       "agent not found: %s",
+		MsgCannotDeleteDefault:                 "cannot delete the default agent",
+		MsgUserCtxRequired:                     "user context required",
+		MsgGatewayOperatorSecureCLIUnavailable: "Gateway operator access was skipped because SecureCLI storage is unavailable.",
+		MsgGatewayOperatorEligibilityFailed:    "Agent was created, but gateway operator access could not verify first-agent eligibility.",
+		MsgGatewayOperatorNotFirstAgent:        "Gateway operator access was not granted because this is not the first agent.",
+		MsgGatewayOperatorTokenMissing:         "Gateway operator access was skipped because the gateway token is not configured.",
+		MsgGatewayOperatorBinaryMissing:        "Gateway operator access was skipped because the goclaw binary could not be discovered.",
+		MsgGatewayOperatorExistingReview:       "Gateway operator access was skipped because an existing goclaw CLI credential requires manual review.",
+		MsgGatewayOperatorRegisterFailed:       "Gateway operator access was skipped because the goclaw CLI credential could not be registered.",
+		MsgGatewayOperatorCredentialFailed:     "Gateway operator access was skipped because credentials could not be stored.",
 
 		// Chat
 		MsgRateLimitExceeded: "rate limit exceeded — please wait",

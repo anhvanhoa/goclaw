@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "更新内容无效",
 
 		// Agent
-		MsgAgentNotFound:       "未找到Agent：%s",
-		MsgCannotDeleteDefault: "无法删除默认Agent",
-		MsgUserCtxRequired:     "需要用户上下文",
+		MsgAgentNotFound:                       "未找到Agent：%s",
+		MsgCannotDeleteDefault:                 "无法删除默认Agent",
+		MsgUserCtxRequired:                     "需要用户上下文",
+		MsgGatewayOperatorSecureCLIUnavailable: "已跳过网关 operator 访问，因为 SecureCLI 存储不可用。",
+		MsgGatewayOperatorEligibilityFailed:    "Agent 已创建，但无法验证其是否为第一个 Agent 来授予网关 operator 访问。",
+		MsgGatewayOperatorNotFirstAgent:        "未授予网关 operator 访问，因为这不是第一个 Agent。",
+		MsgGatewayOperatorTokenMissing:         "已跳过网关 operator 访问，因为未配置网关 token。",
+		MsgGatewayOperatorBinaryMissing:        "已跳过网关 operator 访问，因为无法发现 goclaw binary。",
+		MsgGatewayOperatorExistingReview:       "已跳过网关 operator 访问，因为现有 goclaw CLI credential 需要手动检查。",
+		MsgGatewayOperatorRegisterFailed:       "已跳过网关 operator 访问，因为无法注册 goclaw CLI credential。",
+		MsgGatewayOperatorCredentialFailed:     "已跳过网关 operator 访问，因为无法存储 credential。",
 
 		// Chat
 		MsgRateLimitExceeded: "请求频率超限 — 请稍候",

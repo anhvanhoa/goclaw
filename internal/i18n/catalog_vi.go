@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "cập nhật không hợp lệ",
 
 		// Agent
-		MsgAgentNotFound:       "không tìm thấy agent: %s",
-		MsgCannotDeleteDefault: "không thể xóa agent mặc định",
-		MsgUserCtxRequired:     "yêu cầu ngữ cảnh người dùng",
+		MsgAgentNotFound:                       "không tìm thấy agent: %s",
+		MsgCannotDeleteDefault:                 "không thể xóa agent mặc định",
+		MsgUserCtxRequired:                     "yêu cầu ngữ cảnh người dùng",
+		MsgGatewayOperatorSecureCLIUnavailable: "Đã bỏ qua quyền gateway operator vì kho SecureCLI chưa khả dụng.",
+		MsgGatewayOperatorEligibilityFailed:    "Agent đã được tạo, nhưng không thể xác minh đây là agent đầu tiên để cấp quyền gateway operator.",
+		MsgGatewayOperatorNotFirstAgent:        "Không cấp quyền gateway operator vì đây không phải agent đầu tiên.",
+		MsgGatewayOperatorTokenMissing:         "Đã bỏ qua quyền gateway operator vì gateway token chưa được cấu hình.",
+		MsgGatewayOperatorBinaryMissing:        "Đã bỏ qua quyền gateway operator vì không tìm thấy binary goclaw.",
+		MsgGatewayOperatorExistingReview:       "Đã bỏ qua quyền gateway operator vì credential CLI goclaw hiện có cần kiểm tra thủ công.",
+		MsgGatewayOperatorRegisterFailed:       "Đã bỏ qua quyền gateway operator vì không thể đăng ký credential CLI goclaw.",
+		MsgGatewayOperatorCredentialFailed:     "Đã bỏ qua quyền gateway operator vì không thể lưu credential.",
 
 		// Chat
 		MsgRateLimitExceeded: "vượt quá giới hạn tốc độ — vui lòng đợi",
