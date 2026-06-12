@@ -6,6 +6,18 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-06-12
 
+### Cron scheduler shutdown drain (post-merge CI follow-up)
+
+**Fixes**
+
+- Made cron service shutdown wait for scheduler-launched job executions to
+  finish so in-flight status persistence cannot outlive `Stop()`.
+
+**Tests**
+
+- Added regression coverage proving `Stop()` waits for a blocked in-flight job
+  before returning.
+
 ### Bundled GoClaw gateway administration skill (issue #175)
 
 **Changes**
