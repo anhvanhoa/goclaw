@@ -28,7 +28,7 @@ func NewSQLiteCustomToolStore(db *sql.DB, encryptionKey string) *SQLiteCustomToo
 }
 
 const customToolSelectCols = `id, tenant_id, name, description, parameters, command, working_dir,
- timeout_seconds, agent_id, enabled, created_by, created_at, updated_at`
+ timeout_seconds, agent_ids, enabled, created_by, created_at, updated_at`
 
 func (s *SQLiteCustomToolStore) List(ctx context.Context) ([]store.CustomToolDef, error) {
 	tenantID := store.TenantIDFromContext(ctx)
@@ -89,12 +89,17 @@ func (s *SQLiteCustomToolStore) Create(ctx context.Context, def store.CustomTool
 		return "", fmt.Errorf("encrypt env: %w", err)
 	}
 
+	agentIDsJSON, err := json.Marshal(def.AgentIDs)
+	if err != nil {
+		agentIDsJSON = []byte("[]")
+	}
+
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO custom_tools (id, tenant_id, name, description, parameters, command, working_dir,
-		 timeout_seconds, env, agent_id, enabled, created_by, created_at, updated_at)
+		 timeout_seconds, env, agent_ids, enabled, created_by, created_at, updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, tenantID.String(), def.Name, def.Description, string(params), def.Command, def.WorkingDir,
-		def.TimeoutSeconds, encEnv, def.AgentID, boolToInt(def.Enabled), def.CreatedBy, now, now,
+		def.TimeoutSeconds, encEnv, string(agentIDsJSON), boolToInt(def.Enabled), def.CreatedBy, now, now,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -112,7 +117,7 @@ func (s *SQLiteCustomToolStore) Update(ctx context.Context, id string, updates m
 	}
 
 	allowed := make(map[string]any)
-	for _, col := range []string{"name", "description", "parameters", "command", "working_dir", "timeout_seconds", "agent_id", "enabled"} {
+	for _, col := range []string{"name", "description", "parameters", "command", "working_dir", "timeout_seconds", "agent_ids", "enabled"} {
 		if v, ok := updates[col]; ok {
 			allowed[col] = v
 		}
@@ -189,14 +194,14 @@ func (s *SQLiteCustomToolStore) GetEnv(ctx context.Context, id string) (map[stri
 func (s *SQLiteCustomToolStore) scanCustomTool(row *sql.Row) (*store.CustomToolDef, error) {
 	var def store.CustomToolDef
 	var params string
-	var agentID *string
+	var agentIDsStr string
 	var tenantIDStr string
 	var enabled int
 	createdAt, updatedAt := scanTimePair()
 
 	err := row.Scan(
 		&def.ID, &tenantIDStr, &def.Name, &def.Description, &params, &def.Command, &def.WorkingDir,
-		&def.TimeoutSeconds, &agentID, &enabled, &def.CreatedBy, createdAt, updatedAt,
+		&def.TimeoutSeconds, &agentIDsStr, &enabled, &def.CreatedBy, createdAt, updatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -204,7 +209,12 @@ func (s *SQLiteCustomToolStore) scanCustomTool(row *sql.Row) (*store.CustomToolD
 	def.CreatedAt = createdAt.Time
 	def.UpdatedAt = updatedAt.Time
 	def.Enabled = enabled != 0
-	def.AgentID = agentID
+	if agentIDsStr != "" {
+		_ = json.Unmarshal([]byte(agentIDsStr), &def.AgentIDs)
+	}
+	if def.AgentIDs == nil {
+		def.AgentIDs = []string{}
+	}
 	if tid, err2 := uuid.Parse(tenantIDStr); err2 == nil {
 		def.TenantID = tid
 	}
@@ -220,21 +230,26 @@ func (s *SQLiteCustomToolStore) scanCustomTools(rows *sql.Rows) ([]store.CustomT
 	for rows.Next() {
 		var def store.CustomToolDef
 		var params string
-		var agentID *string
+		var agentIDsStr string
 		var tenantIDStr string
 		var enabled int
 		createdAt, updatedAt := scanTimePair()
 
 		if err := rows.Scan(
 			&def.ID, &tenantIDStr, &def.Name, &def.Description, &params, &def.Command, &def.WorkingDir,
-			&def.TimeoutSeconds, &agentID, &enabled, &def.CreatedBy, createdAt, updatedAt,
+			&def.TimeoutSeconds, &agentIDsStr, &enabled, &def.CreatedBy, createdAt, updatedAt,
 		); err != nil {
 			continue
 		}
 		def.CreatedAt = createdAt.Time
 		def.UpdatedAt = updatedAt.Time
 		def.Enabled = enabled != 0
-		def.AgentID = agentID
+		if agentIDsStr != "" {
+			_ = json.Unmarshal([]byte(agentIDsStr), &def.AgentIDs)
+		}
+		if def.AgentIDs == nil {
+			def.AgentIDs = []string{}
+		}
 		if tid, err2 := uuid.Parse(tenantIDStr); err2 == nil {
 			def.TenantID = tid
 		}
@@ -284,4 +299,3 @@ func decryptEnvVarsSQLite(encEnv []byte, encKey string) (map[string]string, erro
 	}
 	return result, nil
 }
-

@@ -269,7 +269,9 @@
     "noMatchTitle": "未找到匹配工具",
     "scope": {
       "agent": "Agent",
-      "global": "全局"
+      "global": "全局",
+      "agents": "{{count}} 个Agent",
+      "globalHint": "留空使此工具对所有Agent可用。"
     },
     "searchPlaceholder": "搜索工具...",
     "title": "自定义工具",

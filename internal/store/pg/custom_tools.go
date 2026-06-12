@@ -27,7 +27,7 @@ func NewPGCustomToolStore(db *sql.DB, encryptionKey string) *PGCustomToolStore {
 }
 
 const customToolSelectCols = `id, tenant_id, name, description, parameters, command, working_dir,
- timeout_seconds, agent_id, enabled, created_by, created_at, updated_at`
+ timeout_seconds, agent_ids, enabled, created_by, created_at, updated_at`
 
 func (s *PGCustomToolStore) List(ctx context.Context) ([]store.CustomToolDef, error) {
 	tenantID := store.TenantIDFromContext(ctx)
@@ -88,12 +88,17 @@ func (s *PGCustomToolStore) Create(ctx context.Context, def store.CustomToolDef,
 		return "", fmt.Errorf("encrypt env: %w", err)
 	}
 
+	agentIDsJSON, err := json.Marshal(def.AgentIDs)
+	if err != nil {
+		agentIDsJSON = []byte("[]")
+	}
+
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO custom_tools (id, tenant_id, name, description, parameters, command, working_dir,
-		 timeout_seconds, env, agent_id, enabled, created_by, created_at, updated_at)
+		 timeout_seconds, env, agent_ids, enabled, created_by, created_at, updated_at)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
 		id, tenantID, def.Name, def.Description, []byte(params), def.Command, def.WorkingDir,
-		def.TimeoutSeconds, encEnv, def.AgentID, def.Enabled, def.CreatedBy, now, now,
+		def.TimeoutSeconds, encEnv, agentIDsJSON, def.Enabled, def.CreatedBy, now, now,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -111,7 +116,7 @@ func (s *PGCustomToolStore) Update(ctx context.Context, id string, updates map[s
 	}
 
 	allowed := make(map[string]any)
-	for _, col := range []string{"name", "description", "parameters", "command", "working_dir", "timeout_seconds", "agent_id", "enabled"} {
+	for _, col := range []string{"name", "description", "parameters", "command", "working_dir", "timeout_seconds", "agent_ids", "enabled"} {
 		if v, ok := updates[col]; ok {
 			allowed[col] = v
 		}
@@ -194,15 +199,20 @@ func (s *PGCustomToolStore) GetEnv(ctx context.Context, id string) (map[string]s
 func scanCustomTool(row *sql.Row) (*store.CustomToolDef, error) {
 	var def store.CustomToolDef
 	var params []byte
-	var agentID *string
+	var agentIDsJSON []byte
 	err := row.Scan(
 		&def.ID, &def.TenantID, &def.Name, &def.Description, &params, &def.Command, &def.WorkingDir,
-		&def.TimeoutSeconds, &agentID, &def.Enabled, &def.CreatedBy, &def.CreatedAt, &def.UpdatedAt,
+		&def.TimeoutSeconds, &agentIDsJSON, &def.Enabled, &def.CreatedBy, &def.CreatedAt, &def.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	def.AgentID = agentID
+	if len(agentIDsJSON) > 0 {
+		_ = json.Unmarshal(agentIDsJSON, &def.AgentIDs)
+	}
+	if def.AgentIDs == nil {
+		def.AgentIDs = []string{}
+	}
 	if params != nil {
 		def.Parameters = json.RawMessage(params)
 	}
@@ -215,14 +225,19 @@ func scanCustomTools(rows *sql.Rows) ([]store.CustomToolDef, error) {
 	for rows.Next() {
 		var def store.CustomToolDef
 		var params []byte
-		var agentID *string
+		var agentIDsJSON []byte
 		if err := rows.Scan(
 			&def.ID, &def.TenantID, &def.Name, &def.Description, &params, &def.Command, &def.WorkingDir,
-			&def.TimeoutSeconds, &agentID, &def.Enabled, &def.CreatedBy, &def.CreatedAt, &def.UpdatedAt,
+			&def.TimeoutSeconds, &agentIDsJSON, &def.Enabled, &def.CreatedBy, &def.CreatedAt, &def.UpdatedAt,
 		); err != nil {
 			continue
 		}
-		def.AgentID = agentID
+		if len(agentIDsJSON) > 0 {
+			_ = json.Unmarshal(agentIDsJSON, &def.AgentIDs)
+		}
+		if def.AgentIDs == nil {
+			def.AgentIDs = []string{}
+		}
 		if params != nil {
 			def.Parameters = json.RawMessage(params)
 		}

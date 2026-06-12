@@ -18,7 +18,7 @@ export const customToolSchema = z.object({
   }, "Must be valid JSON"),
   workingDir: z.string(),
   timeoutSeconds: z.number().min(1).max(3600),
-  agentId: z.string(),
+  agentIds: z.array(z.string()),
   enabled: z.boolean(),
   envEntries: z.array(envEntrySchema),
 });

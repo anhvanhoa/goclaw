@@ -19,7 +19,9 @@
     },
     "scope": {
       "agent": "Agent",
-      "global": "Global"
+      "global": "Global",
+      "agents": "{{count}} agent(s)",
+      "globalHint": "Leave empty to make this tool available to all agents."
     },
     "delete": {
       "title": "Delete Custom Tool",

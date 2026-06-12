@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
@@ -14,40 +14,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { customToolSchema, type CustomToolFormValues } from "@/schemas/custom-tool.schema";
 import type { CustomToolData, CustomToolFormData } from "./hooks/use-custom-tools";
+import { MultiAgentPicker } from "./components/multi-agent-picker";
 
 interface CustomToolDialogProps {
   open: boolean;
   tool?: CustomToolData | null;
   onOpenChange: (open: boolean) => void;
   onSave: (data: CustomToolFormData) => Promise<void>;
+  fetchToolEnv: (id: string) => Promise<Record<string, string>>;
 }
 
-const defaultValues: CustomToolFormValues = {
+const emptyDefaults: CustomToolFormValues = {
   name: "",
   description: "",
   command: "",
   parametersStr: "{}",
   workingDir: "",
   timeoutSeconds: 60,
-  agentId: "",
+  agentIds: [],
   enabled: true,
-  envEntries: [{ key: "", value: "" }],
-}
+  envEntries: [],
+};
 
-export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToolDialogProps) {
+export function CustomToolDialog({ open, tool, onOpenChange, onSave, fetchToolEnv }: CustomToolDialogProps) {
   const { t } = useTranslation("tools");
-  const { agents } = useAgents();
   const isEdit = !!tool;
+  const [envLoading, setEnvLoading] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
@@ -57,7 +52,7 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
     formState: { errors, isSubmitting },
   } = useForm<CustomToolFormValues>({
     resolver: zodResolver(customToolSchema),
-    defaultValues,
+    defaultValues: emptyDefaults,
   });
 
   const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
@@ -66,24 +61,41 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
   });
 
   useEffect(() => {
-    if (open) {
-      if (tool) {
-        reset({
-          name: tool.name,
-          description: tool.description,
-          command: tool.command,
-          parametersStr: JSON.stringify(tool.parameters ?? {}, null, 2),
-          workingDir: tool.workingDir ?? "",
-          timeoutSeconds: tool.timeoutSeconds ?? 60,
-          agentId: tool.agentId ?? "",
-          enabled: tool.enabled,
-          envEntries: [],
-        });
-      } else {
-        reset(defaultValues);
-      }
+    if (!open) return;
+    if (tool) {
+      setEnvLoading(true);
+      fetchToolEnv(tool.id)
+        .then((env) => {
+          reset({
+            name: tool.name,
+            description: tool.description,
+            command: tool.command,
+            parametersStr: JSON.stringify(tool.parameters ?? {}, null, 2),
+            workingDir: tool.workingDir ?? "",
+            timeoutSeconds: tool.timeoutSeconds ?? 60,
+            agentIds: tool.agentIds ?? [],
+            enabled: tool.enabled,
+            envEntries: Object.entries(env).map(([key]) => ({ key, value: "****" })),
+          });
+        })
+        .catch(() => {
+          reset({
+            name: tool.name,
+            description: tool.description,
+            command: tool.command,
+            parametersStr: JSON.stringify(tool.parameters ?? {}, null, 2),
+            workingDir: tool.workingDir ?? "",
+            timeoutSeconds: tool.timeoutSeconds ?? 60,
+            agentIds: tool.agentIds ?? [],
+            enabled: tool.enabled,
+            envEntries: [],
+          });
+        })
+        .finally(() => setEnvLoading(false));
+    } else {
+      reset(emptyDefaults);
     }
-  }, [open, tool, reset]);
+  }, [open, tool?.id]);
 
   const onFormSubmit = async (data: CustomToolFormValues) => {
     const env: Record<string, string> = {};
@@ -98,16 +110,18 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
       parameters: JSON.parse(data.parametersStr || "{}"),
       workingDir: data.workingDir,
       timeoutSeconds: data.timeoutSeconds,
-      agentId: data.agentId || undefined,
+      agentIds: data.agentIds.length > 0 ? data.agentIds : undefined,
       enabled: data.enabled,
       env: Object.keys(env).length > 0 ? env : undefined,
     });
     onOpenChange(false);
   };
 
+  const busy = isSubmitting || envLoading;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] flex flex-col sm:max-w-lg">
+      <DialogContent ref={contentRef} className="max-h-[85vh] flex flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t("custom.form.editTitle") : t("custom.form.createTitle")}
@@ -190,29 +204,19 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
             </div>
           </div>
 
-          {/* Agent */}
+          {/* Agents — multi-select */}
           <div className="space-y-2">
             <Label>{t("custom.form.agentId")}</Label>
+            <p className="text-xs text-muted-foreground">{t("custom.scope.globalHint")}</p>
             <Controller
               control={control}
-              name="agentId"
+              name="agentIds"
               render={({ field }) => (
-                <Select
-                  value={field.value || "__global__"}
-                  onValueChange={(v) => field.onChange(v === "__global__" ? "" : v)}
-                >
-                  <SelectTrigger className="text-base md:text-sm">
-                    <SelectValue placeholder={t("custom.form.agentIdPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__global__">{t("custom.scope.global")}</SelectItem>
-                    {agents.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.display_name || a.agent_key || a.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiAgentPicker
+                  value={field.value}
+                  onChange={field.onChange}
+                  portalContainer={contentRef}
+                />
               )}
             />
           </div>
@@ -220,36 +224,42 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
           {/* Env Vars */}
           <div className="space-y-2">
             <Label>Env Vars</Label>
-            {envFields.map((field, i) => (
-              <div key={field.id} className="flex gap-2 items-center">
-                <Input
-                  {...register(`envEntries.${i}.key`)}
-                  placeholder="KEY"
-                  className="flex-1 font-mono text-xs"
-                />
-                <Input
-                  {...register(`envEntries.${i}.value`)}
-                  placeholder="value"
-                  type="password"
-                  className="flex-1"
-                />
-                <button
+            {envLoading ? (
+              <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : (
+              <>
+                {envFields.map((field, i) => (
+                  <div key={field.id} className="flex gap-2 items-center">
+                    <Input
+                      {...register(`envEntries.${i}.key`)}
+                      placeholder="KEY"
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <Input
+                      {...register(`envEntries.${i}.value`)}
+                      placeholder="value"
+                      type="password"
+                      className="flex-1 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeEnv(i)}
+                      className="text-muted-foreground hover:text-destructive px-1 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <Button
                   type="button"
-                  onClick={() => removeEnv(i)}
-                  className="text-muted-foreground hover:text-destructive px-1 text-sm"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendEnv({ key: "", value: "" })}
                 >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => appendEnv({ key: "", value: "" })}
-            >
-              + Add
-            </Button>
+                  + Add
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Enabled */}
@@ -269,10 +279,10 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             {t("custom.form.cancel")}
           </Button>
-          <Button onClick={handleSubmit(onFormSubmit)} disabled={isSubmitting}>
+          <Button onClick={handleSubmit(onFormSubmit)} disabled={busy}>
             {isSubmitting
               ? t("custom.form.saving")
               : isEdit

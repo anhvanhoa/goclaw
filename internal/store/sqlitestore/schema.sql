@@ -1882,7 +1882,7 @@ CREATE INDEX IF NOT EXISTS idx_browser_cookies_expires_at
     ON browser_cookies (expires_at);
 
 -- ============================================================
--- Table: custom_tools (migration 74: re-added with tenant_id)
+-- Table: custom_tools (migration 74: re-added with tenant_id; migration 75: agent_ids array)
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS custom_tools (
@@ -1895,17 +1895,13 @@ CREATE TABLE IF NOT EXISTS custom_tools (
     working_dir     TEXT NOT NULL DEFAULT '',
     timeout_seconds INTEGER NOT NULL DEFAULT 60,
     env             BLOB,
-    agent_id        TEXT REFERENCES agents(id) ON DELETE CASCADE,
+    agent_ids       TEXT NOT NULL DEFAULT '[]',
     enabled         INTEGER NOT NULL DEFAULT 1,
     created_by      VARCHAR(255) NOT NULL DEFAULT '',
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant_global
-    ON custom_tools(tenant_id, name) WHERE agent_id IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant_agent
-    ON custom_tools(tenant_id, name, agent_id) WHERE agent_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant
+    ON custom_tools(tenant_id, name);
 CREATE INDEX IF NOT EXISTS idx_custom_tools_tenant ON custom_tools(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_custom_tools_agent
-    ON custom_tools(agent_id) WHERE agent_id IS NOT NULL;

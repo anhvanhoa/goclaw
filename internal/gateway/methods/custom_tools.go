@@ -79,7 +79,7 @@ func (m *CustomToolsMethods) handleCreate(ctx context.Context, client *gateway.C
 		Command        string            `json:"command"`
 		WorkingDir     string            `json:"workingDir"`
 		TimeoutSeconds int               `json:"timeoutSeconds"`
-		AgentID        *string           `json:"agentId,omitempty"`
+		AgentIDs       []string          `json:"agentIds,omitempty"`
 		Enabled        *bool             `json:"enabled,omitempty"`
 		Env            map[string]string `json:"env,omitempty"`
 	}
@@ -111,7 +111,7 @@ func (m *CustomToolsMethods) handleCreate(ctx context.Context, client *gateway.C
 		Command:        params.Command,
 		WorkingDir:     params.WorkingDir,
 		TimeoutSeconds: params.TimeoutSeconds,
-		AgentID:        params.AgentID,
+		AgentIDs:       params.AgentIDs,
 		Enabled:        enabled,
 		CreatedBy:      client.UserID(),
 	}
@@ -152,7 +152,7 @@ func (m *CustomToolsMethods) handleUpdate(ctx context.Context, client *gateway.C
 		Command        *string           `json:"command,omitempty"`
 		WorkingDir     *string           `json:"workingDir,omitempty"`
 		TimeoutSeconds *int              `json:"timeoutSeconds,omitempty"`
-		AgentID        *string           `json:"agentId,omitempty"`
+		AgentIDs       []string          `json:"agentIds,omitempty"`
 		Enabled        *bool             `json:"enabled,omitempty"`
 		Env            map[string]string `json:"env,omitempty"`
 	}
@@ -180,8 +180,9 @@ func (m *CustomToolsMethods) handleUpdate(ctx context.Context, client *gateway.C
 	if params.TimeoutSeconds != nil {
 		updates["timeout_seconds"] = *params.TimeoutSeconds
 	}
-	if params.AgentID != nil {
-		updates["agent_id"] = *params.AgentID
+	if params.AgentIDs != nil {
+		agentIDsJSON, _ := json.Marshal(params.AgentIDs)
+		updates["agent_ids"] = agentIDsJSON
 	}
 	if params.Enabled != nil {
 		updates["enabled"] = *params.Enabled

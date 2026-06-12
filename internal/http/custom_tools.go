@@ -49,6 +49,7 @@ func (h *CustomToolsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/tools/custom", requireAuth("", h.handleList))
 	mux.HandleFunc("POST /v1/tools/custom", requireAuth(permissions.RoleAdmin, h.handleCreate))
 	mux.HandleFunc("GET /v1/tools/custom/{id}", requireAuth("", h.handleGet))
+	mux.HandleFunc("GET /v1/tools/custom/{id}/env", requireAuth(permissions.RoleAdmin, h.handleGetEnv))
 	mux.HandleFunc("PUT /v1/tools/custom/{id}", requireAuth(permissions.RoleAdmin, h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/tools/custom/{id}", requireAuth(permissions.RoleAdmin, h.handleDelete))
 }
@@ -86,6 +87,28 @@ func (h *CustomToolsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, def)
 }
 
+func (h *CustomToolsHandler) handleGetEnv(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "id")})
+		return
+	}
+	envVars, err := h.store.GetEnv(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrCustomToolNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "custom tool", id)})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if envVars == nil {
+		envVars = map[string]string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"env": envVars})
+}
+
 // createCustomToolRequest is the request body for POST /v1/tools/custom.
 type createCustomToolRequest struct {
 	Name           string            `json:"name"`
@@ -94,7 +117,7 @@ type createCustomToolRequest struct {
 	Command        string            `json:"command"`
 	WorkingDir     string            `json:"workingDir"`
 	TimeoutSeconds int               `json:"timeoutSeconds"`
-	AgentID        *string           `json:"agentId,omitempty"`
+	AgentIDs       []string          `json:"agentIds,omitempty"`
 	Enabled        *bool             `json:"enabled,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 }
@@ -132,7 +155,7 @@ func (h *CustomToolsHandler) handleCreate(w http.ResponseWriter, r *http.Request
 		Command:        req.Command,
 		WorkingDir:     req.WorkingDir,
 		TimeoutSeconds: req.TimeoutSeconds,
-		AgentID:        req.AgentID,
+		AgentIDs:       req.AgentIDs,
 		Enabled:        enabled,
 		CreatedBy:      userID,
 	}
@@ -167,7 +190,7 @@ type updateCustomToolRequest struct {
 	Command        *string           `json:"command,omitempty"`
 	WorkingDir     *string           `json:"workingDir,omitempty"`
 	TimeoutSeconds *int              `json:"timeoutSeconds,omitempty"`
-	AgentID        *string           `json:"agentId,omitempty"`
+	AgentIDs       []string          `json:"agentIds,omitempty"`
 	Enabled        *bool             `json:"enabled,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 }
@@ -217,8 +240,9 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		}
 		updates["timeout_seconds"] = *req.TimeoutSeconds
 	}
-	if req.AgentID != nil {
-		updates["agent_id"] = *req.AgentID
+	if req.AgentIDs != nil {
+		agentIDsJSON, _ := json.Marshal(req.AgentIDs)
+		updates["agent_ids"] = agentIDsJSON
 	}
 	if req.Enabled != nil {
 		updates["enabled"] = *req.Enabled

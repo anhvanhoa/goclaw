@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 43
+const SchemaVersion = 44
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -772,6 +772,13 @@ CREATE INDEX IF NOT EXISTS idx_browser_cookies_expires_at
 	40: `ALTER TABLE secure_cli_user_credentials ADD COLUMN host_scope TEXT;`,
 	// Version 41 → 42: credential adapter framework — adapter_name on binaries.
 	41: `ALTER TABLE secure_cli_binaries ADD COLUMN adapter_name TEXT;`,
+	// Version 43 → 44: custom_tools — replace single agent_id with agent_ids JSON array.
+	43: `ALTER TABLE custom_tools ADD COLUMN agent_ids TEXT NOT NULL DEFAULT '[]';
+UPDATE custom_tools SET agent_ids = json_array(agent_id) WHERE agent_id IS NOT NULL;
+DROP INDEX IF EXISTS idx_custom_tools_name_tenant_global;
+DROP INDEX IF EXISTS idx_custom_tools_name_tenant_agent;
+DROP INDEX IF EXISTS idx_custom_tools_agent;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant ON custom_tools(tenant_id, name);`,
 	// Version 42 → 43: custom_tools table (re-added from migration 74 with tenant_id).
 	42: `CREATE TABLE IF NOT EXISTS custom_tools (
     id              TEXT NOT NULL PRIMARY KEY,

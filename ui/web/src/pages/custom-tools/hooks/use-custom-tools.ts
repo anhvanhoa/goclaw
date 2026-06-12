@@ -14,7 +14,7 @@ export interface CustomToolData {
   command: string;
   workingDir: string;
   timeoutSeconds: number;
-  agentId?: string | null;
+  agentIds: string[];
   enabled: boolean;
   createdBy: string;
   createdAt: string;
@@ -28,7 +28,7 @@ export interface CustomToolFormData {
   parameters: Record<string, unknown>;
   workingDir: string;
   timeoutSeconds: number;
-  agentId?: string;
+  agentIds?: string[];
   enabled: boolean;
   env?: Record<string, string>;
 }
@@ -49,6 +49,14 @@ export function useCustomTools() {
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.customTools.all }),
     [queryClient],
+  );
+
+  const fetchToolEnv = useCallback(
+    async (id: string): Promise<Record<string, string>> => {
+      const res = await http.get<{ env: Record<string, string> }>(`/v1/tools/custom/${id}/env`);
+      return res.env ?? {};
+    },
+    [http],
   );
 
   const createTool = useCallback(
@@ -112,5 +120,5 @@ export function useCustomTools() {
     [http, invalidate, queryClient],
   );
 
-  return { tools, loading, createTool, updateTool, deleteTool, toggleTool };
+  return { tools, loading, createTool, updateTool, deleteTool, toggleTool, fetchToolEnv };
 }

@@ -25,7 +25,7 @@ type CustomToolDef struct {
 	Command        string          `json:"command"`
 	WorkingDir     string          `json:"workingDir"`
 	TimeoutSeconds int             `json:"timeoutSeconds"`
-	AgentID        *string         `json:"agentId,omitempty"`
+	AgentIDs       []string        `json:"agentIds"` // empty = global (available to all agents)
 	Enabled        bool            `json:"enabled"`
 	CreatedBy      string          `json:"createdBy"`
 	CreatedAt      time.Time       `json:"createdAt"`

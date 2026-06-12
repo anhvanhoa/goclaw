@@ -41,7 +41,9 @@ export function CustomToolRow({ tool, onEdit, onToggle, onDelete }: CustomToolRo
         </td>
         <td className="py-3 px-4">
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
-            {tool.agentId ? t("custom.scope.agent") : t("custom.scope.global")}
+            {tool.agentIds && tool.agentIds.length > 0
+              ? t("custom.scope.agents", { count: tool.agentIds.length })
+              : t("custom.scope.global")}
           </span>
         </td>
         <td className="py-3 px-4">

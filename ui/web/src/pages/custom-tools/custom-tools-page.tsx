@@ -13,7 +13,7 @@ import { CustomToolRow } from "./custom-tool-row";
 
 export function CustomToolsPage() {
   const { t } = useTranslation("tools");
-  const { tools, loading, createTool, updateTool, deleteTool, toggleTool } = useCustomTools();
+  const { tools, loading, createTool, updateTool, deleteTool, toggleTool, fetchToolEnv } = useCustomTools();
   const showSkeleton = useDeferredLoading(loading && tools.length === 0);
 
   const [search, setSearch] = useState("");
@@ -109,6 +109,7 @@ export function CustomToolsPage() {
         tool={editingTool}
         onOpenChange={setDialogOpen}
         onSave={handleSave}
+        fetchToolEnv={fetchToolEnv}
       />
     </div>
   );

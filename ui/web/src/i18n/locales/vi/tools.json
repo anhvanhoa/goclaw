@@ -19,7 +19,9 @@
     },
     "scope": {
       "agent": "Agent",
-      "global": "Toàn cục"
+      "global": "Toàn cục",
+      "agents": "{{count}} agent",
+      "globalHint": "Để trống để công cụ này khả dụng cho tất cả agent."
     },
     "delete": {
       "title": "Xóa công cụ tùy chỉnh",
