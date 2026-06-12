@@ -32,6 +32,18 @@ interface CustomToolDialogProps {
   onSave: (data: CustomToolFormData) => Promise<void>;
 }
 
+const defaultValues: CustomToolFormValues = {
+  name: "",
+  description: "",
+  command: "",
+  parametersStr: "{}",
+  workingDir: "",
+  timeoutSeconds: 60,
+  agentId: "",
+  enabled: true,
+  envEntries: [{ key: "", value: "" }],
+}
+
 export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToolDialogProps) {
   const { t } = useTranslation("tools");
   const { agents } = useAgents();
@@ -45,17 +57,7 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
     formState: { errors, isSubmitting },
   } = useForm<CustomToolFormValues>({
     resolver: zodResolver(customToolSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      command: "",
-      parametersStr: "{}",
-      workingDir: "",
-      timeoutSeconds: 60,
-      agentId: "",
-      enabled: true,
-      envEntries: [],
-    },
+    defaultValues,
   });
 
   const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
@@ -78,17 +80,7 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave }: CustomToo
           envEntries: [],
         });
       } else {
-        reset({
-          name: "",
-          description: "",
-          command: "",
-          parametersStr: "{}",
-          workingDir: "",
-          timeoutSeconds: 60,
-          agentId: "",
-          enabled: true,
-          envEntries: [],
-        });
+        reset(defaultValues);
       }
     }
   }, [open, tool, reset]);

@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -21,10 +22,26 @@ type CustomToolsMethods struct {
 	encKey   string
 	eventBus bus.EventPublisher
 	cfg      *config.Config
+	reg      *tools.Registry
 }
 
-func NewCustomToolsMethods(s store.CustomToolStore, encKey string, eventBus bus.EventPublisher, cfg *config.Config) *CustomToolsMethods {
-	return &CustomToolsMethods{store: s, encKey: encKey, eventBus: eventBus, cfg: cfg}
+func NewCustomToolsMethods(s store.CustomToolStore, encKey string, eventBus bus.EventPublisher, cfg *config.Config, reg *tools.Registry) *CustomToolsMethods {
+	return &CustomToolsMethods{store: s, encKey: encKey, eventBus: eventBus, cfg: cfg, reg: reg}
+}
+
+// reRegisterTool fetches decrypted env vars and registers (or re-registers) the tool in the
+// in-memory registry so running agents see the latest definition without a server restart.
+func (m *CustomToolsMethods) reRegisterTool(ctx context.Context, def *store.CustomToolDef) {
+	if m.reg == nil {
+		return
+	}
+	envVars, _ := m.store.GetEnv(ctx, def.ID)
+	var params map[string]any
+	if len(def.Parameters) > 0 {
+		json.Unmarshal(def.Parameters, &params) //nolint:errcheck
+	}
+	ct := tools.NewCustomTool(def.Name, def.Description, params, def.Command, def.WorkingDir, def.TimeoutSeconds, envVars)
+	m.reg.Register(ct)
 }
 
 func (m *CustomToolsMethods) Register(router *gateway.MethodRouter) {
@@ -110,6 +127,12 @@ func (m *CustomToolsMethods) handleCreate(ctx context.Context, client *gateway.C
 		return
 	}
 
+	if enabled && m.reg != nil {
+		if created, err2 := m.store.Get(ctx, id); err2 == nil {
+			m.reRegisterTool(ctx, created)
+		}
+	}
+
 	emitAudit(m.eventBus, client, "custom_tool.created", "custom_tool", params.Name)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"id": id, "status": "created"}))
 }
@@ -181,6 +204,16 @@ func (m *CustomToolsMethods) handleUpdate(ctx context.Context, client *gateway.C
 		return
 	}
 
+	if m.reg != nil {
+		if updated, err2 := m.store.Get(ctx, params.ID); err2 == nil {
+			if updated.Enabled {
+				m.reRegisterTool(ctx, updated)
+			} else {
+				m.reg.Unregister(updated.Name)
+			}
+		}
+	}
+
 	emitAudit(m.eventBus, client, "custom_tool.updated", "custom_tool", params.ID)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"status": "updated"}))
 }
@@ -203,6 +236,13 @@ func (m *CustomToolsMethods) handleDelete(ctx context.Context, client *gateway.C
 		return
 	}
 
+	var toolName string
+	if m.reg != nil {
+		if existing, err2 := m.store.Get(ctx, params.ID); err2 == nil {
+			toolName = existing.Name
+		}
+	}
+
 	if err := m.store.Delete(ctx, params.ID); err != nil {
 		if errors.Is(err, store.ErrCustomToolNotFound) {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "custom tool", params.ID)))
@@ -211,6 +251,10 @@ func (m *CustomToolsMethods) handleDelete(ctx context.Context, client *gateway.C
 		slog.Error("custom_tools.delete rpc", "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
+	}
+
+	if toolName != "" {
+		m.reg.Unregister(toolName)
 	}
 
 	emitAudit(m.eventBus, client, "custom_tool.deleted", "custom_tool", params.ID)
@@ -245,6 +289,16 @@ func (m *CustomToolsMethods) handleToggle(ctx context.Context, client *gateway.C
 		slog.Error("custom_tools.toggle rpc", "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
+	}
+
+	if m.reg != nil {
+		if def, err2 := m.store.Get(ctx, params.ID); err2 == nil {
+			if params.Enabled {
+				m.reRegisterTool(ctx, def)
+			} else {
+				m.reg.Unregister(def.Name)
+			}
+		}
 	}
 
 	emitAudit(m.eventBus, client, "custom_tool.toggled", "custom_tool", params.ID)

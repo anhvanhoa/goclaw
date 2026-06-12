@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 var customToolNameRe = regexp.MustCompile(`^[a-z0-9_]+$`)
@@ -21,10 +23,26 @@ type CustomToolsHandler struct {
 	store  store.CustomToolStore
 	encKey string
 	msgBus *bus.MessageBus
+	reg    *tools.Registry
 }
 
-func NewCustomToolsHandler(s store.CustomToolStore, encKey string, msgBus *bus.MessageBus) *CustomToolsHandler {
-	return &CustomToolsHandler{store: s, encKey: encKey, msgBus: msgBus}
+func NewCustomToolsHandler(s store.CustomToolStore, encKey string, msgBus *bus.MessageBus, reg *tools.Registry) *CustomToolsHandler {
+	return &CustomToolsHandler{store: s, encKey: encKey, msgBus: msgBus, reg: reg}
+}
+
+// reRegisterTool fetches decrypted env vars from the store and registers (or re-registers)
+// the tool in the in-memory registry so running agents see the latest definition.
+func (h *CustomToolsHandler) reRegisterTool(ctx context.Context, def *store.CustomToolDef) {
+	if h.reg == nil {
+		return
+	}
+	envVars, _ := h.store.GetEnv(ctx, def.ID)
+	var params map[string]any
+	if len(def.Parameters) > 0 {
+		json.Unmarshal(def.Parameters, &params) //nolint:errcheck
+	}
+	ct := tools.NewCustomTool(def.Name, def.Description, params, def.Command, def.WorkingDir, def.TimeoutSeconds, envVars)
+	h.reg.Register(ct)
 }
 
 func (h *CustomToolsHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -128,6 +146,13 @@ func (h *CustomToolsHandler) handleCreate(w http.ResponseWriter, r *http.Request
 		slog.Error("custom_tools.create", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToCreate, "custom tool", err.Error())})
 		return
+	}
+
+	// Sync in-memory tool registry so agents see the new tool immediately.
+	if enabled && h.reg != nil {
+		if created, err2 := h.store.Get(r.Context(), id); err2 == nil {
+			h.reRegisterTool(r.Context(), created)
+		}
 	}
 
 	emitAudit(h.msgBus, r, "custom_tool.created", "custom_tool", req.Name)
@@ -241,6 +266,17 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Sync in-memory registry: re-register if enabled, unregister if disabled.
+	if h.reg != nil {
+		if updated, err2 := h.store.Get(r.Context(), id); err2 == nil {
+			if updated.Enabled {
+				h.reRegisterTool(r.Context(), updated)
+			} else {
+				h.reg.Unregister(updated.Name)
+			}
+		}
+	}
+
 	emitAudit(h.msgBus, r, "custom_tool.updated", "custom_tool", id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
@@ -256,6 +292,14 @@ func (h *CustomToolsHandler) handleDelete(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Capture tool name before deletion so we can unregister from in-memory registry.
+	var toolName string
+	if h.reg != nil {
+		if existing, err2 := h.store.Get(r.Context(), id); err2 == nil {
+			toolName = existing.Name
+		}
+	}
+
 	if err := h.store.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrCustomToolNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "custom tool", id)})
@@ -264,6 +308,10 @@ func (h *CustomToolsHandler) handleDelete(w http.ResponseWriter, r *http.Request
 		slog.Error("custom_tools.delete", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	if toolName != "" {
+		h.reg.Unregister(toolName)
 	}
 
 	emitAudit(h.msgBus, r, "custom_tool.deleted", "custom_tool", id)

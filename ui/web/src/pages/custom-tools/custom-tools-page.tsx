@@ -77,7 +77,7 @@ export function CustomToolsPage() {
           />
         ) : (
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[600px]">
+            <table className="w-full min-w-150">
               <thead>
                 <tr className="border-b bg-muted/50 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   <th className="py-2.5 px-4 text-left">{t("custom.columns.name")}</th>

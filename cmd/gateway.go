@@ -452,7 +452,7 @@ func runGateway() {
 
 	// Custom tools RPC methods (custom_tools.list/create/update/delete/toggle).
 	if pgStores.CustomTools != nil {
-		methods.NewCustomToolsMethods(pgStores.CustomTools, os.Getenv("GOCLAW_ENCRYPTION_KEY"), msgBus, cfg).Register(server.Router())
+		methods.NewCustomToolsMethods(pgStores.CustomTools, os.Getenv("GOCLAW_ENCRYPTION_KEY"), msgBus, cfg, toolsReg).Register(server.Router())
 		slog.Info("registered custom_tools RPC methods")
 	}
 
