@@ -1393,6 +1393,26 @@ Follow response:
 }
 ```
 
+Main binary operator commands wrap the same endpoints:
+
+```bash
+goclaw traces list --query "provider fail" --status error
+goclaw traces get <trace-id> -o json
+goclaw traces export <trace-id> --file trace.json.gz
+goclaw traces follow --session <session-key>
+goclaw traces timeline <trace-id>
+```
+
+Remote gateways use the shared client overrides:
+
+```bash
+goclaw --server https://goclaw.example.com --token "$GOCLAW_GATEWAY_TOKEN" traces list -o json
+```
+
+The same `--server` / `--token` resolver is shared with WebSocket/RPC-backed
+admin commands. `GOCLAW_SERVER` or `GOCLAW_GATEWAY_URL` can provide the base URL
+when the flag is omitted.
+
 ### Run Timeline
 
 `GET /v1/runs/{runID}/timeline` returns display-safe archive entries for one
