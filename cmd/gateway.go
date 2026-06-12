@@ -316,6 +316,14 @@ func runGateway() {
 	// Register cron/heartbeat/session/message tools, aliases, allow-paths, store wiring.
 	heartbeatTool, hasMemory := wireExtraTools(pgStores, toolsReg, msgBus, workspace, dataDir, agentCfg, globalSkillsDir, builtinSkillsDir)
 
+	// Load user-defined custom tools from DB and register them in the tool registry.
+	if pgStores.CustomTools != nil {
+		ctxBg := store.WithTenantID(context.Background(), store.MasterTenantID)
+		if err := tools.LoadCustomTools(ctxBg, pgStores.CustomTools, os.Getenv("GOCLAW_ENCRYPTION_KEY"), toolsReg); err != nil {
+			slog.Warn("custom_tools: load failed at startup", "error", err)
+		}
+	}
+
 	// Register workstation_exec + claude_remote tools (Standard edition only; deny-all until Phase 6).
 	// cleanupWorkstation stops the activity sink retention goroutine and drains the write buffer.
 	cleanupWorkstation := wireWorkstationTools(pgStores, toolsReg, domainBus)
@@ -441,6 +449,12 @@ func runGateway() {
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
 	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc)
+
+	// Custom tools RPC methods (custom_tools.list/create/update/delete/toggle).
+	if pgStores.CustomTools != nil {
+		methods.NewCustomToolsMethods(pgStores.CustomTools, os.Getenv("GOCLAW_ENCRYPTION_KEY"), msgBus, cfg).Register(server.Router())
+		slog.Info("registered custom_tools RPC methods")
+	}
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {

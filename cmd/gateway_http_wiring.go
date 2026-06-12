@@ -82,6 +82,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	if h.builtinTools != nil {
 		d.server.SetBuiltinToolsHandler(h.builtinTools)
 	}
+	if d.pgStores != nil && d.pgStores.CustomTools != nil {
+		d.server.SetCustomToolsHandler(httpapi.NewCustomToolsHandler(d.pgStores.CustomTools, os.Getenv("GOCLAW_ENCRYPTION_KEY"), d.msgBus))
+	}
 	if h.pendingMessages != nil {
 		if pc := d.cfg.Channels.PendingCompaction; pc != nil {
 			h.pendingMessages.SetKeepRecent(pc.KeepRecent)

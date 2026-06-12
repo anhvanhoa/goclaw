@@ -61,6 +61,9 @@ export const queryKeys = {
   builtinTools: {
     all: ["builtinTools"] as const,
   },
+  customTools: {
+    all: ["customTools"] as const,
+  },
   config: {
     all: ["config"] as const,
     defaults: ["config", "defaults"] as const,

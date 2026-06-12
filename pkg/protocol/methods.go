@@ -229,6 +229,15 @@ const (
 	MethodHooksHistory = "hooks.history"
 )
 
+// Custom tools management (user-defined shell commands exposed as agent tools).
+const (
+	MethodCustomToolsList   = "custom_tools.list"
+	MethodCustomToolsCreate = "custom_tools.create"
+	MethodCustomToolsUpdate = "custom_tools.update"
+	MethodCustomToolsDelete = "custom_tools.delete"
+	MethodCustomToolsToggle = "custom_tools.toggle"
+)
+
 // Bitrix24 portal management (self-service onboarding for the bitrix24 channel).
 // See plans/260513-1648-bitrix24-portal-self-service-ux/phase-02-backend-rpc-portals.md.
 const (

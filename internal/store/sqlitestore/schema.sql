@@ -24,7 +24,7 @@
 --   team_workspace_comments  (migration 24: dropped)
 --   team_workspace_file_versions (migration 24: dropped)
 --   team_task_attachments    (migration 24: old version dropped, new path-based version created)
---   custom_tools             (migration 27: dropped)
+--   custom_tools             (migration 27: dropped, re-added migration 74 as custom_tools)
 --
 -- FK cascade constraints reflect final state after migration 23 alterations.
 
@@ -1880,3 +1880,32 @@ CREATE INDEX IF NOT EXISTS idx_browser_cookies_scope_domain
     ON browser_cookies (tenant_id, user_id, agent_id, domain);
 CREATE INDEX IF NOT EXISTS idx_browser_cookies_expires_at
     ON browser_cookies (expires_at);
+
+-- ============================================================
+-- Table: custom_tools (migration 74: re-added with tenant_id)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS custom_tools (
+    id              TEXT NOT NULL PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name            VARCHAR(100) NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    parameters      TEXT NOT NULL DEFAULT '{}',
+    command         TEXT NOT NULL,
+    working_dir     TEXT NOT NULL DEFAULT '',
+    timeout_seconds INTEGER NOT NULL DEFAULT 60,
+    env             BLOB,
+    agent_id        TEXT REFERENCES agents(id) ON DELETE CASCADE,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    created_by      VARCHAR(255) NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant_global
+    ON custom_tools(tenant_id, name) WHERE agent_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_tools_name_tenant_agent
+    ON custom_tools(tenant_id, name, agent_id) WHERE agent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_custom_tools_tenant ON custom_tools(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_custom_tools_agent
+    ON custom_tools(agent_id) WHERE agent_id IS NOT NULL;

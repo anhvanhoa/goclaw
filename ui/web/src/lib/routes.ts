@@ -29,6 +29,7 @@ export const ROUTES = {
   TEAMS: "/teams",
   TEAM_DETAIL: "/teams/:id",
   BUILTIN_TOOLS: "/builtin-tools",
+  CUSTOM_TOOLS: "/custom-tools",
   CLI_CREDENTIALS: "/cli-credentials",
   MCP: "/mcp",
   TTS: "/tts",

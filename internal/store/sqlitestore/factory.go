@@ -43,6 +43,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Tracing:               NewSQLiteTracingStore(db),
 		ConfigSecrets:         NewSQLiteConfigSecretsStore(db, cfg.EncryptionKey),
 		BuiltinTools:          NewSQLiteBuiltinToolStore(db),
+		CustomTools:           NewSQLiteCustomToolStore(db, cfg.EncryptionKey),
 		Heartbeats:            NewSQLiteHeartbeatStore(db),
 		Tenants:               NewSQLiteTenantStore(db),
 		BuiltinToolTenantCfgs: NewSQLiteBuiltinToolTenantConfigStore(db),

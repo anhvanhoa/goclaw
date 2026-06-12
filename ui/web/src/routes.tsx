@@ -66,6 +66,9 @@ const TeamsPage = lazyWithRetry(() =>
 const BuiltinToolsPage = lazyWithRetry(() =>
   import("@/pages/builtin-tools/builtin-tools-page").then((m) => ({ default: m.BuiltinToolsPage })),
 );
+const CustomToolsPage = lazyWithRetry(() =>
+  import("@/pages/custom-tools/custom-tools-page").then((m) => ({ default: m.CustomToolsPage })),
+);
 const TtsPage = lazyWithRetry(() =>
   import("@/pages/tts/tts-page").then((m) => ({ default: m.TtsPage })),
 );
@@ -189,6 +192,7 @@ export function AppRoutes() {
           <Route path={ROUTES.WORKSTATIONS} element={<RequireAdmin><WorkstationsPage /></RequireAdmin>} />
           <Route path={ROUTES.LOGS} element={<RequireAdmin><LogsPage /></RequireAdmin>} />
           <Route path={ROUTES.BUILTIN_TOOLS} element={<RequireAdmin><BuiltinToolsPage /></RequireAdmin>} />
+          <Route path={ROUTES.CUSTOM_TOOLS} element={<RequireAdmin><CustomToolsPage /></RequireAdmin>} />
           <Route path={ROUTES.MCP} element={<RequireAdmin><MCPPage /></RequireAdmin>} />
           <Route path={ROUTES.TTS} element={<RequireCrossTenant><TtsPage /></RequireCrossTenant>} />
           <Route path={ROUTES.STORAGE} element={<RequireAdmin><StoragePage /></RequireAdmin>} />
