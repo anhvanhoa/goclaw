@@ -152,7 +152,7 @@ func (m *CustomToolsMethods) handleUpdate(ctx context.Context, client *gateway.C
 		Command        *string           `json:"command,omitempty"`
 		WorkingDir     *string           `json:"workingDir,omitempty"`
 		TimeoutSeconds *int              `json:"timeoutSeconds,omitempty"`
-		AgentIDs       []string          `json:"agentIds,omitempty"`
+		AgentIDs       *[]string         `json:"agentIds,omitempty"`
 		Enabled        *bool             `json:"enabled,omitempty"`
 		Env            map[string]string `json:"env,omitempty"`
 	}
@@ -181,7 +181,7 @@ func (m *CustomToolsMethods) handleUpdate(ctx context.Context, client *gateway.C
 		updates["timeout_seconds"] = *params.TimeoutSeconds
 	}
 	if params.AgentIDs != nil {
-		agentIDsJSON, _ := json.Marshal(params.AgentIDs)
+		agentIDsJSON, _ := json.Marshal(*params.AgentIDs)
 		updates["agent_ids"] = agentIDsJSON
 	}
 	if params.Enabled != nil {

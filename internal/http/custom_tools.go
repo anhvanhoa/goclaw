@@ -190,7 +190,7 @@ type updateCustomToolRequest struct {
 	Command        *string           `json:"command,omitempty"`
 	WorkingDir     *string           `json:"workingDir,omitempty"`
 	TimeoutSeconds *int              `json:"timeoutSeconds,omitempty"`
-	AgentIDs       []string          `json:"agentIds,omitempty"`
+	AgentIDs       *[]string         `json:"agentIds,omitempty"`
 	Enabled        *bool             `json:"enabled,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 }
@@ -241,7 +241,7 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		updates["timeout_seconds"] = *req.TimeoutSeconds
 	}
 	if req.AgentIDs != nil {
-		agentIDsJSON, _ := json.Marshal(req.AgentIDs)
+		agentIDsJSON, _ := json.Marshal(*req.AgentIDs)
 		updates["agent_ids"] = agentIDsJSON
 	}
 	if req.Enabled != nil {

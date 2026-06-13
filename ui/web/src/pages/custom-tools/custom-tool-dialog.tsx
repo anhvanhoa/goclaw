@@ -75,7 +75,7 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave, fetchToolEn
             timeoutSeconds: tool.timeoutSeconds ?? 60,
             agentIds: tool.agentIds ?? [],
             enabled: tool.enabled,
-            envEntries: Object.entries(env).map(([key]) => ({ key, value: "****" })),
+            envEntries: Object.entries(env).map(([key, value]) => ({ key, value })),
           });
         })
         .catch(() => {
@@ -110,7 +110,7 @@ export function CustomToolDialog({ open, tool, onOpenChange, onSave, fetchToolEn
       parameters: JSON.parse(data.parametersStr || "{}"),
       workingDir: data.workingDir,
       timeoutSeconds: data.timeoutSeconds,
-      agentIds: data.agentIds.length > 0 ? data.agentIds : undefined,
+      agentIds: data.agentIds,
       enabled: data.enabled,
       env: Object.keys(env).length > 0 ? env : undefined,
     });
