@@ -480,6 +480,15 @@ func runGateway() {
 		}
 		wsMethods.Register(server.Router())
 		slog.Info("registered workstations RPC methods")
+
+		// Backfill default command allowlist for workstations created before migration 000063.
+		if pgStores.WorkstationPermissions != nil {
+			if n, err := pgStores.WorkstationPermissions.BackfillDefaults(context.Background()); err != nil {
+				slog.Warn("workstation permissions backfill failed", "error", err)
+			} else if n > 0 {
+				slog.Info("workstation permissions backfilled", "workstations", n)
+			}
+		}
 	}
 
 	// Wire post-turn processor for team task dispatch (WS chat.send + HTTP API paths).

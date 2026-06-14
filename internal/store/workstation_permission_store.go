@@ -43,6 +43,11 @@ type WorkstationPermissionStore interface {
 	// Uses INSERT OR IGNORE / ON CONFLICT DO NOTHING — safe to call multiple times.
 	// Intended to be called inside the workstation Create transaction (H5 fix).
 	SeedDefaults(ctx context.Context, workstationID, tenantID uuid.UUID) error
+
+	// BackfillDefaults seeds default binary allowlist entries for all workstations
+	// that currently have zero permission entries. Safe to call at startup; idempotent.
+	// Returns the count of workstations that were backfilled.
+	BackfillDefaults(ctx context.Context) (int, error)
 }
 
 // DefaultAllowedBinaries is the set of binary names seeded when a workstation is created.

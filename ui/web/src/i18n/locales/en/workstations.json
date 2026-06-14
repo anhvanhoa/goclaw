@@ -27,6 +27,41 @@
     "activate": "Activate",
     "deactivate": "Deactivate"
   },
+  "details": {
+    "title": "Overview",
+    "id": "ID",
+    "defaultCwd": "Default Working Directory",
+    "updated": "Last Updated"
+  },
+  "agents": {
+    "title": "Agents",
+    "selectLabel": "Agent to link",
+    "selectPlaceholder": "Select an agent...",
+    "makeDefault": "Set as default",
+    "allow": "Link",
+    "empty": "No agents linked. Link an agent to allow it to use this workstation by default.",
+    "default": "Default",
+    "setDefault": "Set Default",
+    "revoke": "Unlink",
+    "columns": {
+      "agent": "Agent",
+      "status": "Status"
+    }
+  },
+  "permissions": {
+    "title": "Permissions",
+    "empty": "No command patterns configured. Default patterns (git, ls, cat...) are seeded automatically.",
+    "addPlaceholder": "e.g. git, python*, node",
+    "add": "Add Pattern",
+    "columns": {
+      "pattern": "Pattern",
+      "enabled": "Enabled",
+      "createdBy": "Added By",
+      "createdAt": "Added At"
+    },
+    "remove": "Remove",
+    "hint": "Patterns match the binary name (argv[0]). Use 'python*' for prefix-glob. The lone wildcard '*' is always rejected."
+  },
   "createDialog": {
     "title": "Add Workstation",
     "description": "Configure a new remote workstation connection.",
@@ -43,8 +78,13 @@
     "portLabel": "Port",
     "userLabel": "SSH User",
     "userPlaceholder": "ubuntu",
-    "identityFileLabel": "Identity File (optional)",
-    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "privateKeyLabel": "Private Key (PEM)",
+    "privateKeyPlaceholder": "-----BEGIN RSA PRIVATE KEY-----\n...",
+    "privateKeyHint": "Paste the PEM contents of your private key",
+    "passwordLabel": "SSH Password",
+    "passwordPlaceholder": "••••••••",
+    "passwordHint": "Prefer key-based auth over password",
+    "authHint": "At least one required: Private Key or Password",
     "containerLabel": "Container Name / ID",
     "containerPlaceholder": "my-container",
     "dockerHostLabel": "Docker Host (optional)",

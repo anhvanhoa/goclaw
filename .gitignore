@@ -112,3 +112,6 @@ scripts/docker-patch-*.sql
 
 # Logs
 logs/
+
+# MCP
+mcp/

@@ -82,8 +82,10 @@ func (t *WorkstationExecTool) SetPermCheck(fn PermCheckFn) {
 func (t *WorkstationExecTool) Name() string { return "workstation_exec" }
 
 func (t *WorkstationExecTool) Description() string {
-	return "Execute a command on a remote user-owned workstation (SSH or Docker backend). " +
-		"Streams stdout/stderr as events. Returns exit code and output tail."
+	return "Execute a binary on a remote workstation (SSH or Docker) using argv-exec — NOT a shell. " +
+		"'command' is the binary name only (argv[0]); pass arguments separately in 'args'. " +
+		"Shell operators (&&, |, ;, >, $()) are NOT supported in 'command' — split into multiple calls or use bash -c. " +
+		"Streams stdout/stderr as events. Returns exit code and output tails."
 }
 
 func (t *WorkstationExecTool) Parameters() map[string]any {
@@ -96,11 +98,12 @@ func (t *WorkstationExecTool) Parameters() map[string]any {
 			},
 			"command": map[string]any{
 				"type":        "string",
-				"description": "Command to execute",
+				"description": "Binary name only (argv[0]). Examples: 'echo', 'git', 'python3'. Do NOT include arguments or shell operators here — use 'args' for arguments.",
 			},
 			"args": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string"},
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Arguments passed to the binary. Example: command='echo' args=['hello world']. For shell pipelines use command='bash' args=['-c','cmd1 && cmd2'].",
 			},
 			"cwd": map[string]any{
 				"type":        "string",

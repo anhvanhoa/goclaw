@@ -27,6 +27,41 @@
     "activate": "Kích hoạt",
     "deactivate": "Tắt"
   },
+  "details": {
+    "title": "Tổng quan",
+    "id": "ID",
+    "defaultCwd": "Thư mục làm việc mặc định",
+    "updated": "Cập nhật lần cuối"
+  },
+  "agents": {
+    "title": "Agents",
+    "selectLabel": "Agent cần liên kết",
+    "selectPlaceholder": "Chọn agent...",
+    "makeDefault": "Đặt làm mặc định",
+    "allow": "Liên kết",
+    "empty": "Chưa có agent nào được liên kết. Liên kết agent để nó có thể sử dụng workstation này mặc định.",
+    "default": "Mặc định",
+    "setDefault": "Đặt mặc định",
+    "revoke": "Hủy liên kết",
+    "columns": {
+      "agent": "Agent",
+      "status": "Trạng thái"
+    }
+  },
+  "permissions": {
+    "title": "Quyền",
+    "empty": "Chưa có pattern lệnh nào. Các pattern mặc định (git, ls, cat...) được tạo tự động.",
+    "addPlaceholder": "VD: git, python*, node",
+    "add": "Thêm Pattern",
+    "columns": {
+      "pattern": "Pattern",
+      "enabled": "Bật",
+      "createdBy": "Thêm bởi",
+      "createdAt": "Thêm lúc"
+    },
+    "remove": "Xóa",
+    "hint": "Pattern khớp với tên binary (argv[0]). Dùng 'python*' cho prefix-glob. Wildcard đơn '*' luôn bị từ chối."
+  },
   "createDialog": {
     "title": "Thêm Workstation",
     "description": "Cấu hình kết nối workstation từ xa mới.",
@@ -43,8 +78,13 @@
     "portLabel": "Cổng",
     "userLabel": "SSH User",
     "userPlaceholder": "ubuntu",
-    "identityFileLabel": "File khóa (tùy chọn)",
-    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "privateKeyLabel": "Private Key (PEM)",
+    "privateKeyPlaceholder": "-----BEGIN RSA PRIVATE KEY-----\n...",
+    "privateKeyHint": "Dán nội dung PEM của private key",
+    "passwordLabel": "Mật khẩu SSH",
+    "passwordPlaceholder": "••••••••",
+    "passwordHint": "Ưu tiên dùng private key thay vì mật khẩu",
+    "authHint": "Bắt buộc ít nhất một: Private Key hoặc Mật khẩu",
     "containerLabel": "Tên / ID container",
     "containerPlaceholder": "my-container",
     "dockerHostLabel": "Docker Host (tùy chọn)",

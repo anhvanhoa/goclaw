@@ -25,13 +25,13 @@ var shellMetaChars = regexp.MustCompile(`[;|&$` + "`" + `(){}[\]<>]`)
 
 // Dangerous arg flags that enable code execution.
 var dangerousArgPatterns = []string{
-	"--eval", "-e", "-c",      // Code execution flags
-	"--require", "-r",         // Module injection
-	"--import",                // ES module injection
-	"exec(", "eval(",          // Inline code
-	"__import__",              // Python import injection
-	"child_process",           // Node.js process spawning
-	"subprocess",              // Python subprocess
+	"--eval", "-e", "-c", // Code execution flags
+	"--require", "-r", // Module injection
+	"--import",       // ES module injection
+	"exec(", "eval(", // Inline code
+	"__import__",    // Python import injection
+	"child_process", // Node.js process spawning
+	"subprocess",    // Python subprocess
 }
 
 // Fail-closed env var allowlist — only these are permitted for env: resolution.
@@ -77,12 +77,23 @@ func ValidateCommand(cmd string) error {
 		basename = cmd[idx+1:]
 	}
 
-	// Allow absolute paths to known commands
+	// Allow absolute paths: either to a known runtime (by basename) or to a
+	// binary inside trusted data directories (e.g. /app/mcps/).
+	// Admins are the only ones who can place files in these paths, so the
+	// basename allowlist restriction does not apply to them.
 	if strings.HasPrefix(cmd, "/") {
-		if !allowedCommands[basename] {
-			return fmt.Errorf("command %q not in allowlist", basename)
+		if allowedCommands[basename] {
+			return nil
 		}
-		return nil
+		trustedPrefixes := []string{
+			"/app/mcps/",
+		}
+		for _, prefix := range trustedPrefixes {
+			if strings.HasPrefix(cmd, prefix) {
+				return nil
+			}
+		}
+		return fmt.Errorf("command %q not in allowlist and not in a trusted path (allowed: node, npx, python, python3, ruby, go, java, uvx, uv, pipx, deno, bun; or use absolute path under /app/mcps/)", basename)
 	}
 
 	// Bare command must be in allowlist

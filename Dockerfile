@@ -145,7 +145,7 @@ RUN chmod +x /app/docker-entrypoint.sh && \
 # Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
 RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
         /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude /app/skills \
-        /app/tsnet-state /app/.goclaw \
+        /app/tsnet-state /app/.goclaw /app/mcps \
     && ln -s /app/data/.claude /app/.claude \
     && touch /app/data/.runtime/apk-packages \
     && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \

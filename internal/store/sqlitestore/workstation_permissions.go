@@ -125,6 +125,48 @@ func (s *SQLiteWorkstationPermissionStore) SeedDefaults(ctx context.Context, wor
 	return nil
 }
 
+// BackfillDefaults seeds default binary allowlist entries for all workstations
+// that currently have zero permission entries. Returns count of workstations backfilled.
+// Safe to call at startup; idempotent via INSERT OR IGNORE.
+func (s *SQLiteWorkstationPermissionStore) BackfillDefaults(ctx context.Context) (int, error) {
+	// Fetch workstations with no permission entries.
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT w.id, w.tenant_id FROM workstations w
+		 WHERE NOT EXISTS (SELECT 1 FROM workstation_permissions wp WHERE wp.workstation_id = w.id)`)
+	if err != nil {
+		return 0, fmt.Errorf("workstation_permissions backfill list: %w", err)
+	}
+	type wsRow struct{ id, tenantID string }
+	var targets []wsRow
+	for rows.Next() {
+		var r wsRow
+		if err := rows.Scan(&r.id, &r.tenantID); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("workstation_permissions backfill scan: %w", err)
+		}
+		targets = append(targets, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("workstation_permissions backfill rows: %w", err)
+	}
+
+	now := time.Now().Format("2006-01-02T15:04:05.000Z")
+	for _, t := range targets {
+		for _, pattern := range store.DefaultAllowedBinaries {
+			if _, err := s.db.ExecContext(ctx,
+				`INSERT OR IGNORE INTO workstation_permissions
+				 (id, workstation_id, tenant_id, pattern, enabled, created_by, created_at)
+				 VALUES (?,?,?,?,1,'system',?)`,
+				store.GenNewID().String(), t.id, t.tenantID, pattern, now,
+			); err != nil {
+				return 0, fmt.Errorf("workstation_permissions backfill seed %q: %w", pattern, err)
+			}
+		}
+	}
+	return len(targets), nil
+}
+
 func sqliteScanPermRows(rows *sql.Rows) ([]store.WorkstationPermission, error) {
 	var result []store.WorkstationPermission
 	for rows.Next() {

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -42,7 +43,8 @@ export function WorkstationCreateDialog({
   const [host, setHost] = useState("");
   const [port, setPort] = useState("22");
   const [user, setUser] = useState("");
-  const [identityFile, setIdentityFile] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [password, setPassword] = useState("");
   // Docker fields
   const [container, setContainer] = useState("");
   const [dockerHost, setDockerHost] = useState("");
@@ -57,7 +59,8 @@ export function WorkstationCreateDialog({
     setHost("");
     setPort("22");
     setUser("");
-    setIdentityFile("");
+    setPrivateKey("");
+    setPassword("");
     setContainer("");
     setDockerHost("");
     setFieldError(null);
@@ -74,11 +77,16 @@ export function WorkstationCreateDialog({
         setFieldError("Host and SSH user are required for SSH backend.");
         return;
       }
+      if (!privateKey.trim() && !password.trim()) {
+        setFieldError(t("createDialog.authHint"));
+        return;
+      }
       metadata = {
         host: host.trim(),
         port: parseInt(port, 10) || 22,
         user: user.trim(),
-        ...(identityFile.trim() ? { identity_file: identityFile.trim() } : {}),
+        ...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
+        ...(password.trim() ? { password: password.trim() } : {}),
       };
     } else {
       if (!container.trim()) {
@@ -94,7 +102,7 @@ export function WorkstationCreateDialog({
     setFieldError(null);
     setSubmitting(true);
     try {
-      await onCreate({ workstation_key: key.trim(), name: name.trim(), backend_type: backend, metadata });
+      await onCreate({ workstationKey: key.trim(), name: name.trim(), backendType: backend, metadata });
       resetForm();
       onOpenChange(false);
     } catch (err) {
@@ -189,14 +197,28 @@ export function WorkstationCreateDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="ws-identity">{t("createDialog.identityFileLabel")}</Label>
+                  <Label htmlFor="ws-private-key">{t("createDialog.privateKeyLabel")}</Label>
+                  <Textarea
+                    id="ws-private-key"
+                    value={privateKey}
+                    onChange={(e) => setPrivateKey(e.target.value)}
+                    placeholder={t("createDialog.privateKeyPlaceholder")}
+                    rows={4}
+                    className="resize-none font-mono text-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">{t("createDialog.privateKeyHint")}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ws-password">{t("createDialog.passwordLabel")}</Label>
                   <Input
-                    id="ws-identity"
-                    value={identityFile}
-                    onChange={(e) => setIdentityFile(e.target.value)}
-                    placeholder={t("createDialog.identityFilePlaceholder")}
+                    id="ws-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={t("createDialog.passwordPlaceholder")}
                     className="text-base md:text-sm"
                   />
+                  <p className="text-xs text-muted-foreground">{t("createDialog.passwordHint")}</p>
                 </div>
               </>
             )}

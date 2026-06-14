@@ -27,6 +27,41 @@
     "activate": "启用",
     "deactivate": "停用"
   },
+  "details": {
+    "title": "概览",
+    "id": "ID",
+    "defaultCwd": "默认工作目录",
+    "updated": "最后更新"
+  },
+  "agents": {
+    "title": "Agents",
+    "selectLabel": "要关联的 Agent",
+    "selectPlaceholder": "选择 Agent...",
+    "makeDefault": "设为默认",
+    "allow": "关联",
+    "empty": "尚未关联任何 Agent。关联 Agent 后，它可默认使用此工作站。",
+    "default": "默认",
+    "setDefault": "设为默认",
+    "revoke": "取消关联",
+    "columns": {
+      "agent": "Agent",
+      "status": "状态"
+    }
+  },
+  "permissions": {
+    "title": "权限",
+    "empty": "尚未配置命令模式。默认模式（git、ls、cat 等）已自动创建。",
+    "addPlaceholder": "如 git、python*、node",
+    "add": "添加模式",
+    "columns": {
+      "pattern": "模式",
+      "enabled": "启用",
+      "createdBy": "添加者",
+      "createdAt": "添加时间"
+    },
+    "remove": "删除",
+    "hint": "模式匹配二进制名称（argv[0]）。使用 'python*' 进行前缀匹配。单独的 '*' 通配符始终被拒绝。"
+  },
   "createDialog": {
     "title": "添加工作站",
     "description": "配置新的远程工作站连接。",
@@ -43,8 +78,13 @@
     "portLabel": "端口",
     "userLabel": "SSH 用户",
     "userPlaceholder": "ubuntu",
-    "identityFileLabel": "密钥文件（可选）",
-    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "privateKeyLabel": "私钥（PEM）",
+    "privateKeyPlaceholder": "-----BEGIN RSA PRIVATE KEY-----\n...",
+    "privateKeyHint": "粘贴私钥的 PEM 内容",
+    "passwordLabel": "SSH 密码",
+    "passwordPlaceholder": "••••••••",
+    "passwordHint": "优先使用密钥认证而非密码",
+    "authHint": "私钥或密码至少填写一项",
     "containerLabel": "容器名称 / ID",
     "containerPlaceholder": "my-container",
     "dockerHostLabel": "Docker Host（可选）",

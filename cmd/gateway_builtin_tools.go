@@ -25,6 +25,10 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Settings: json.RawMessage(`{"timeout_seconds":60}`),
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Exec Approval"}`),
 		},
+		{Name: "workstation_exec", DisplayName: "Workstation Exec", Description: "Execute an allowlisted command on a linked remote workstation and stream stdout/stderr", Category: "runtime", Enabled: true,
+			Requires: []string{"workstations"},
+			Metadata: json.RawMessage(`{"config_hint":"Workstations → Permissions"}`),
+		},
 		{Name: "wait", DisplayName: "Wait", Description: "Pause the current agent tool sequence for a bounded number of milliseconds", Category: "runtime", Enabled: true},
 
 		// web

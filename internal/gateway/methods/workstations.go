@@ -81,11 +81,33 @@ func (m *WorkstationsMethods) handleList(ctx context.Context, client *gateway.Cl
 			i18n.T(locale, i18n.MsgFailedToList, "workstations")))
 		return
 	}
-	views := make([]*store.SanitizedWorkstation, len(wss))
+	views := make([]workstationView, len(wss))
 	for i := range wss {
-		views[i] = wss[i].SanitizedView()
+		view, err := m.workstationView(ctx, &wss[i])
+		if err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
+				i18n.T(locale, i18n.MsgFailedToList, "agent_workstation_links")))
+			return
+		}
+		views[i] = view
 	}
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workstations": views}))
+}
+
+type workstationView struct {
+	*store.SanitizedWorkstation
+	AgentLinks []store.AgentWorkstationLink `json:"agentLinks"`
+}
+
+func (m *WorkstationsMethods) workstationView(ctx context.Context, ws *store.Workstation) (workstationView, error) {
+	links, err := m.linkStore.ListForWorkstation(ctx, ws.ID)
+	if err != nil {
+		return workstationView{}, err
+	}
+	return workstationView{
+		SanitizedWorkstation: ws.SanitizedView(),
+		AgentLinks:           links,
+	}, nil
 }
 
 func (m *WorkstationsMethods) handleGet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -116,7 +138,13 @@ func (m *WorkstationsMethods) handleGet(ctx context.Context, client *gateway.Cli
 			i18n.T(locale, i18n.MsgInternalError, err.Error())))
 		return
 	}
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workstation": ws.SanitizedView()}))
+	view, err := m.workstationView(ctx, ws)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
+			i18n.T(locale, i18n.MsgFailedToList, "agent_workstation_links")))
+		return
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workstation": view}))
 }
 
 func (m *WorkstationsMethods) handleCreate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -178,7 +206,13 @@ func (m *WorkstationsMethods) handleCreate(ctx context.Context, client *gateway.
 			i18n.T(locale, i18n.MsgFailedToCreate, "workstation", err.Error())))
 		return
 	}
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workstation": ws.SanitizedView()}))
+	view, err := m.workstationView(ctx, ws)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
+			i18n.T(locale, i18n.MsgFailedToList, "agent_workstation_links")))
+		return
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workstation": view}))
 }
 
 func (m *WorkstationsMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -298,12 +332,18 @@ func (m *WorkstationsMethods) handleLinkAgent(ctx context.Context, client *gatew
 	link := &store.AgentWorkstationLink{
 		AgentID:       agentID,
 		WorkstationID: wsID,
-		IsDefault:     params.IsDefault,
 	}
 	if err := m.linkStore.Link(ctx, link); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
 			i18n.T(locale, i18n.MsgFailedToCreate, "agent_workstation_link", err.Error())))
 		return
+	}
+	if params.IsDefault {
+		if err := m.linkStore.SetDefault(ctx, agentID, wsID); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
+				i18n.T(locale, i18n.MsgFailedToUpdate, "agent_workstation_link", err.Error())))
+			return
+		}
 	}
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"linked": true}))
 }

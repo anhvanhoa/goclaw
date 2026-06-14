@@ -113,6 +113,50 @@ func (s *PGWorkstationPermissionStore) SeedDefaults(ctx context.Context, worksta
 	return nil
 }
 
+// BackfillDefaults seeds default binary allowlist entries for all workstations
+// that currently have zero permission entries. Uses a single CTE+INSERT for efficiency.
+// Returns the count of workstations that were backfilled. Safe to call at startup.
+func (s *PGWorkstationPermissionStore) BackfillDefaults(ctx context.Context) (int, error) {
+	// Build VALUES list for the default binaries.
+	// Hardcoded to avoid dependency on store.DefaultAllowedBinaries inside SQL template.
+	rows, err := s.db.QueryContext(ctx, `
+		WITH needs_seed AS (
+			SELECT w.id AS workstation_id, w.tenant_id
+			FROM workstations w
+			WHERE NOT EXISTS (
+				SELECT 1 FROM workstation_permissions wp WHERE wp.workstation_id = w.id
+			)
+		)
+		INSERT INTO workstation_permissions
+			(id, workstation_id, tenant_id, pattern, enabled, created_by, created_at)
+		SELECT gen_random_uuid(), ns.workstation_id, ns.tenant_id, p.pattern, TRUE, 'system', NOW()
+		FROM needs_seed ns
+		CROSS JOIN (VALUES
+			('echo'),('pwd'),('ls'),('cat'),('git'),
+			('whoami'),('hostname'),('date'),('uname'),('claude')
+		) AS p(pattern)
+		ON CONFLICT (workstation_id, pattern) DO NOTHING
+		RETURNING workstation_id
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("workstation_permissions backfill: %w", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[string]struct{})
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return 0, fmt.Errorf("workstation_permissions backfill scan: %w", err)
+		}
+		seen[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("workstation_permissions backfill rows: %w", err)
+	}
+	return len(seen), nil
+}
+
 func scanPermRows(rows *sql.Rows) ([]store.WorkstationPermission, error) {
 	defer rows.Close()
 	var result []store.WorkstationPermission
