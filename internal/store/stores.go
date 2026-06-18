@@ -13,6 +13,7 @@ type Stores struct {
 	Agents                AgentStore
 	Providers             ProviderStore
 	Tracing               TracingStore
+	RunTimeline           RunTimelineStore
 	MCP                   MCPServerStore
 	ChannelInstances      ChannelInstanceStore
 	ConfigSecrets         ConfigSecretsStore
@@ -21,10 +22,12 @@ type Stores struct {
 	BuiltinTools          BuiltinToolStore
 	CustomTools           CustomToolStore
 	PendingMessages       PendingMessageStore
+	ChannelMemory         ChannelMemoryExtractionStore
 	KnowledgeGraph        KnowledgeGraphStore
 	Contacts              ContactStore
 	Activity              ActivityStore
 	Snapshots             SnapshotStore
+	UsageEvents           UsageEventStore
 	BrowserCookies        BrowserCookieStore
 	SecureCLI             SecureCLIStore
 	SecureCLIGrants       SecureCLIAgentGrantStore
@@ -34,6 +37,7 @@ type Stores struct {
 	Tenants               TenantStore
 	BuiltinToolTenantCfgs BuiltinToolTenantConfigStore
 	SkillTenantCfgs       SkillTenantConfigStore
+	SkillEvolution        SkillEvolutionStore
 	SystemConfigs         SystemConfigStore
 	SubagentTasks         SubagentTaskStore
 	Vault                 VaultStore
