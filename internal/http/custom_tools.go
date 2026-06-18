@@ -42,14 +42,16 @@ func (h *CustomToolsHandler) reRegisterTool(ctx context.Context, def *store.Cust
 		json.Unmarshal(def.Parameters, &params) //nolint:errcheck
 	}
 	ct := tools.NewCustomTool(def.Name, def.Description, params, def.Command, def.WorkingDir, def.TimeoutSeconds, envVars)
-	h.reg.Register(ct)
+	h.reg.RegisterWithMetadata(ct, tools.ToolMetadata{
+		Capabilities:    []tools.ToolCapability{tools.CapMutating},
+		AllowedAgentIDs: def.AgentIDs,
+	})
 }
 
 func (h *CustomToolsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/tools/custom", requireAuth("", h.handleList))
 	mux.HandleFunc("POST /v1/tools/custom", requireAuth(permissions.RoleAdmin, h.handleCreate))
 	mux.HandleFunc("GET /v1/tools/custom/{id}", requireAuth("", h.handleGet))
-	mux.HandleFunc("GET /v1/tools/custom/{id}/env", requireAuth(permissions.RoleAdmin, h.handleGetEnv))
 	mux.HandleFunc("PUT /v1/tools/custom/{id}", requireAuth(permissions.RoleAdmin, h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/tools/custom/{id}", requireAuth(permissions.RoleAdmin, h.handleDelete))
 }
@@ -68,6 +70,13 @@ func (h *CustomToolsHandler) handleList(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"tools": tools})
 }
 
+// customToolResponse wraps CustomToolDef for GET responses, adding envKeys (key names only,
+// never values — env vars are write-only encrypted at rest).
+type customToolResponse struct {
+	store.CustomToolDef
+	EnvKeys []string `json:"envKeys"`
+}
+
 func (h *CustomToolsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 	id := r.PathValue("id")
@@ -84,29 +93,11 @@ func (h *CustomToolsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, def)
-}
-
-func (h *CustomToolsHandler) handleGetEnv(w http.ResponseWriter, r *http.Request) {
-	locale := extractLocale(r)
-	id := r.PathValue("id")
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "id")})
-		return
+	envKeys, _ := h.store.ListEnvKeys(r.Context(), id)
+	if envKeys == nil {
+		envKeys = []string{}
 	}
-	envVars, err := h.store.GetEnv(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, store.ErrCustomToolNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "custom tool", id)})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if envVars == nil {
-		envVars = map[string]string{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"env": envVars})
+	writeJSON(w, http.StatusOK, customToolResponse{CustomToolDef: *def, EnvKeys: envKeys})
 }
 
 // createCustomToolRequest is the request body for POST /v1/tools/custom.
@@ -271,6 +262,14 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Capture old name before update so we can unregister any stale registry entry.
+	var oldName string
+	if h.reg != nil {
+		if existing, err2 := h.store.Get(r.Context(), id); err2 == nil {
+			oldName = existing.Name
+		}
+	}
+
 	var envToStore map[string]string
 	if req.Env != nil {
 		envToStore = req.Env
@@ -290,13 +289,18 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Sync in-memory registry: re-register if enabled, unregister if disabled.
+	// Sync in-memory registry: clean up old and new names to prevent ghost entries,
+	// then re-register if enabled. Unregistering before re-registering ensures a rename
+	// (old_name → new_name) doesn't leave the old entry alive in the registry.
 	if h.reg != nil {
 		if updated, err2 := h.store.Get(r.Context(), id); err2 == nil {
+			if oldName != "" {
+				h.reg.Unregister(oldName)
+			}
+			// Also clear the new name in case a previous attempt left a stale entry.
+			h.reg.Unregister(updated.Name)
 			if updated.Enabled {
 				h.reRegisterTool(r.Context(), updated)
-			} else {
-				h.reg.Unregister(updated.Name)
 			}
 		}
 	}

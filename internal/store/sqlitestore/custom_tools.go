@@ -191,6 +191,18 @@ func (s *SQLiteCustomToolStore) GetEnv(ctx context.Context, id string) (map[stri
 	return decryptEnvVarsSQLite(encEnv, s.encKey)
 }
 
+func (s *SQLiteCustomToolStore) ListEnvKeys(ctx context.Context, id string) ([]string, error) {
+	envVars, err := s.GetEnv(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(envVars))
+	for k := range envVars {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
 func (s *SQLiteCustomToolStore) scanCustomTool(row *sql.Row) (*store.CustomToolDef, error) {
 	var def store.CustomToolDef
 	var params string

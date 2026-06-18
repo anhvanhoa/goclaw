@@ -27,15 +27,31 @@ func filterBootstrapTools(toolNames []string) []string {
 // filteredToolNames returns tool names after applying policy filters.
 // Used for system prompt so denied tools don't appear in ## Tooling section.
 func (l *Loop) filteredToolNames() []string {
+	var names []string
 	if l.toolPolicy == nil {
-		return l.tools.List()
+		names = l.tools.List()
+	} else {
+		defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
+		names = make([]string, len(defs))
+		for i, d := range defs {
+			names[i] = d.Function.Name
+		}
 	}
-	defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
-	names := make([]string, len(defs))
-	for i, d := range defs {
-		names[i] = d.Function.Name
+	// Filter agent-scoped custom tools: exclude tools whose AllowedAgentIDs
+	// is non-empty and does not contain this agent's UUID.
+	if l.registry == nil {
+		return names
 	}
-	return names
+	agentUUID := l.agentUUID.String()
+	filtered := names[:0:0]
+	for _, name := range names {
+		meta := l.registry.GetMetadata(name)
+		if len(meta.AllowedAgentIDs) > 0 && !slices.Contains(meta.AllowedAgentIDs, agentUUID) {
+			continue
+		}
+		filtered = append(filtered, name)
+	}
+	return filtered
 }
 
 // filteredToolNamesForChannel returns tool names after applying both policy

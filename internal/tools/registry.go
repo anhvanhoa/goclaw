@@ -12,6 +12,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/safego"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // Registry manages tool registration and execution.
@@ -182,6 +183,17 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 		return ErrorResult("unknown tool: " + name)
 	}
 
+	// Enforce agent-scoped custom tool restrictions.
+	r.mu.RLock()
+	meta := r.metadata[name]
+	r.mu.RUnlock()
+	if len(meta.AllowedAgentIDs) > 0 {
+		agentID := store.AgentIDFromContext(ctx)
+		if !slices.Contains(meta.AllowedAgentIDs, agentID.String()) {
+			return ErrorResult("tool " + name + " is not available to this agent")
+		}
+	}
+
 	// Inject per-call values into context (immutable — safe for concurrent use)
 	if channel != "" {
 		ctx = WithToolChannel(ctx, channel)
@@ -315,6 +327,27 @@ func (r *Registry) List() []string {
 		if !r.disabled[name] {
 			names = append(names, name)
 		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// ListForAgent returns tool names visible to a specific agent (UUID string).
+// Tools with non-empty AllowedAgentIDs are included only if agentID is in that list.
+// Empty agentID returns the same result as List().
+func (r *Registry) ListForAgent(agentID string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		if r.disabled[name] {
+			continue
+		}
+		meta := r.metadata[name]
+		if agentID != "" && len(meta.AllowedAgentIDs) > 0 && !slices.Contains(meta.AllowedAgentIDs, agentID) {
+			continue
+		}
+		names = append(names, name)
 	}
 	slices.Sort(names)
 	return names

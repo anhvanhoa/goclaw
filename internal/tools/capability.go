@@ -19,6 +19,9 @@ type ToolMetadata struct {
 	Group             string // "fs", "web", "runtime", "memory", "team", etc.
 	RequiresWorkspace bool
 	ProviderHints     map[string]any
+	// AllowedAgentIDs restricts this tool to specific agents (UUID strings).
+	// Empty = global (available to all agents). Used for custom tools with agentIds set.
+	AllowedAgentIDs []string
 }
 
 // HasCapability checks if metadata includes a specific capability.

@@ -37,7 +37,10 @@ func LoadCustomTools(ctx context.Context, s store.CustomToolStore, encKey string
 		}
 
 		ct := NewCustomTool(def.Name, def.Description, params, def.Command, def.WorkingDir, def.TimeoutSeconds, envVars)
-		reg.Register(ct)
+		reg.RegisterWithMetadata(ct, ToolMetadata{
+			Capabilities:    []ToolCapability{CapMutating},
+			AllowedAgentIDs: def.AgentIDs,
+		})
 		registered++
 		slog.Info("custom_tool registered", "name", def.Name, "id", def.ID)
 	}

@@ -51,4 +51,6 @@ type CustomToolStore interface {
 	Delete(ctx context.Context, id string) error
 	// GetEnv decrypts and returns env vars for a tool (used by the tool executor at startup).
 	GetEnv(ctx context.Context, id string) (map[string]string, error)
+	// ListEnvKeys returns the env var key names for a tool (never values — write-only secret model).
+	ListEnvKeys(ctx context.Context, id string) ([]string, error)
 }
