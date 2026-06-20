@@ -77,6 +77,8 @@ flowchart TD
     S3 --> ALLOW["Allow request"]
 ```
 
+**MCP stdio validation** -- Admin-created, imported, tested, and on-demand-discovered MCP server configs pass `internal/mcp.ValidateServerConfig()` before any temporary or persistent client process is created. `stdio` configs are restricted to allowlisted runtime basenames, reject shell metacharacters and eval/import flags, and block remote loader/script/package execution modes such as `node --loader`, `python -m`, `deno`/`bun` remote refs, `npx`/`uvx`/`pipx` package targets, `uv --with`, `npm exec`, `go run`, `cargo install`, and `dotnet tool install`. SSE and streamable-HTTP transports use the SSRF validator above.
+
 **Path traversal**: `resolvePath()` applies `filepath.Clean()` then `HasPrefix()` to ensure all paths stay within the workspace. With `restrict = true`, any path outside the workspace is blocked.
 
 **PathDenyable** -- An interface that lets filesystem tools reject specific path prefixes:
