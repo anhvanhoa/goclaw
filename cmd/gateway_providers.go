@@ -76,8 +76,11 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 	}
 
 	if cfg.Providers.MiniMax.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("minimax", cfg.Providers.MiniMax.APIKey, "https://api.minimax.io/v1", "MiniMax-M2.5").
-			WithChatPath("/text/chatcompletion_v2"))
+		base := cfg.Providers.MiniMax.APIBase
+		if base == "" {
+			base = store.MiniMaxDefaultAPIBase
+		}
+		registry.Register(providers.NewOpenAIProvider("minimax", cfg.Providers.MiniMax.APIKey, base, store.MiniMaxDefaultModel))
 		slog.Info("registered provider", "name", "minimax")
 	}
 
@@ -101,25 +104,26 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		if base == "" {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
-		registry.Register(providers.NewOpenAIProvider("bailian", cfg.Providers.Bailian.APIKey, base, "qwen3.5-plus"))
+		registry.Register(providers.NewOpenAIProvider("bailian", cfg.Providers.Bailian.APIKey, base, "qwen3.5-plus").
+			WithProviderType(store.ProviderBailian))
 		slog.Info("registered provider", "name", "bailian")
 	}
 
 	if cfg.Providers.Zai.APIKey != "" {
 		base := cfg.Providers.Zai.APIBase
 		if base == "" {
-			base = "https://api.z.ai/api/paas/v4"
+			base = store.ZaiDefaultAPIBase
 		}
-		registry.Register(providers.NewOpenAIProvider("zai", cfg.Providers.Zai.APIKey, base, "glm-5"))
+		registry.Register(providers.NewOpenAIProvider("zai", cfg.Providers.Zai.APIKey, base, store.ZaiDefaultModel))
 		slog.Info("registered provider", "name", "zai")
 	}
 
 	if cfg.Providers.ZaiCoding.APIKey != "" {
 		base := cfg.Providers.ZaiCoding.APIBase
 		if base == "" {
-			base = "https://api.z.ai/api/coding/paas/v4"
+			base = store.ZaiCodingDefaultAPIBase
 		}
-		registry.Register(providers.NewOpenAIProvider("zai-coding", cfg.Providers.ZaiCoding.APIKey, base, "glm-5"))
+		registry.Register(providers.NewOpenAIProvider("zai-coding", cfg.Providers.ZaiCoding.APIKey, base, store.ZaiDefaultModel))
 		slog.Info("registered provider", "name", "zai-coding")
 	}
 
@@ -356,19 +360,20 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			if base == "" {
 				base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus").
+				WithProviderType(p.ProviderType))
 		case store.ProviderZai:
 			base := p.APIBase
 			if base == "" {
-				base = "https://api.z.ai/api/paas/v4"
+				base = store.ZaiDefaultAPIBase
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "glm-5"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.ZaiDefaultModel))
 		case store.ProviderZaiCoding:
 			base := p.APIBase
 			if base == "" {
-				base = "https://api.z.ai/api/coding/paas/v4"
+				base = store.ZaiCodingDefaultAPIBase
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "glm-5"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.ZaiDefaultModel))
 		case store.ProviderOllamaCloud:
 			base := p.APIBase
 			if base == "" {
@@ -411,17 +416,27 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			})
 			registry.RegisterForTenant(p.TenantID, prov)
 		default:
-			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
+			base, model := openAIProviderDefaults(p.ProviderType, p.APIBase)
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 			prov.WithProviderType(p.ProviderType)
-			if p.ProviderType == store.ProviderMiniMax {
-				prov.WithChatPath("/text/chatcompletion_v2")
-			}
 			if p.ProviderType == store.ProviderOpenRouter {
 				prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
 			}
 			registry.RegisterForTenant(p.TenantID, prov)
 		}
 		slog.Info("registered provider from DB", "name", p.Name)
+	}
+}
+
+func openAIProviderDefaults(providerType, apiBase string) (string, string) {
+	switch providerType {
+	case store.ProviderMiniMax:
+		if apiBase == "" {
+			apiBase = store.MiniMaxDefaultAPIBase
+		}
+		return apiBase, store.MiniMaxDefaultModel
+	default:
+		return apiBase, ""
 	}
 }
 

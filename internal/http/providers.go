@@ -307,7 +307,20 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		if base == "" {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus").
+			WithProviderType(p.ProviderType))
+	case store.ProviderZai:
+		base := apiBase
+		if base == "" {
+			base = store.ZaiDefaultAPIBase
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.ZaiDefaultModel))
+	case store.ProviderZaiCoding:
+		base := apiBase
+		if base == "" {
+			base = store.ZaiCodingDefaultAPIBase
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.ZaiDefaultModel))
 	case store.ProviderNovita:
 		base := apiBase
 		if base == "" {
@@ -327,13 +340,23 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		})
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
-		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
-		if p.ProviderType == store.ProviderMiniMax {
-			prov.WithChatPath("/text/chatcompletion_v2")
-		}
+		base, model := openAIProviderDefaults(p.ProviderType, apiBase)
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 	return providerRuntimeRegistered
+}
+
+func openAIProviderDefaults(providerType, apiBase string) (string, string) {
+	switch providerType {
+	case store.ProviderMiniMax:
+		if apiBase == "" {
+			apiBase = store.MiniMaxDefaultAPIBase
+		}
+		return apiBase, store.MiniMaxDefaultModel
+	default:
+		return apiBase, ""
+	}
 }
 
 // normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the

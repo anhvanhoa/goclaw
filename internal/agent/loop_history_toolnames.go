@@ -42,6 +42,13 @@ func (l *Loop) filteredToolNames() []string {
 	if l.registry == nil {
 		return names
 	}
+	defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
+	names = make([]string, 0, len(defs))
+	for _, d := range defs {
+		if d.Function != nil {
+			names = append(names, d.Function.Name)
+		}
+	}
 	agentUUID := l.agentUUID.String()
 	filtered := names[:0:0]
 	for _, name := range names {
