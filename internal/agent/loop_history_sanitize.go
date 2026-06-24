@@ -113,22 +113,36 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 
 			result = append(result, msg)
 
-			// Collect matching tool results that follow
-			for i+1 < len(msgs) && msgs[i+1].Role == "tool" {
-				i++
-				toolMsg := msgs[i]
-				if queue, ok := idQueue[toolMsg.ToolCallID]; ok && len(queue) > 0 {
-					newID := queue[0]
-					idQueue[toolMsg.ToolCallID] = queue[1:]
-					toolMsg.ToolCallID = newID
-					result = append(result, toolMsg)
-					delete(expectedIDs, newID)
+			// Collect matching tool results that follow.
+			// Non-tool messages (warnings, nudges) interleaved between tool results
+			// are deferred until all tool results for this assistant turn are collected,
+			// maintaining contiguous tool_result grouping (#1177).
+			var deferredNonTool []providers.Message
+			for i+1 < len(msgs) {
+				next := msgs[i+1]
+				if next.Role == "tool" {
+					i++
+					if queue, ok := idQueue[next.ToolCallID]; ok && len(queue) > 0 {
+						newID := queue[0]
+						idQueue[next.ToolCallID] = queue[1:]
+						next.ToolCallID = newID
+						result = append(result, next)
+						delete(expectedIDs, newID)
+					} else {
+						slog.Debug("sanitizeHistory: dropping mismatched tool result",
+							"tool_call_id", next.ToolCallID)
+						dropped++
+					}
+				} else if next.Role != "assistant" && hasPendingToolResultAhead(msgs, i+2, idQueue) {
+					// Non-tool, non-assistant message with more tool results ahead — defer it.
+					i++
+					deferredNonTool = append(deferredNonTool, next)
 				} else {
-					slog.Debug("sanitizeHistory: dropping mismatched tool result",
-						"tool_call_id", toolMsg.ToolCallID)
-					dropped++
+					break
 				}
 			}
+			// Flush deferred non-tool messages after all tool results.
+			result = append(result, deferredNonTool...)
 
 			// Synthesize missing tool results
 			for _, tc := range msg.ToolCalls {
@@ -182,6 +196,23 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 	return result, dropped
 }
 
+// hasPendingToolResultAhead returns true if there is at least one tool-role
+// message after position start whose ToolCallID is still expected (present
+// in idQueue). Stops scanning at the next assistant message.
+func hasPendingToolResultAhead(msgs []providers.Message, start int, idQueue map[string][]string) bool {
+	for j := start; j < len(msgs); j++ {
+		if msgs[j].Role == "assistant" {
+			return false
+		}
+		if msgs[j].Role == "tool" {
+			if queue := idQueue[msgs[j].ToolCallID]; len(queue) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	history := l.sessions.GetHistory(ctx, sessionKey)
 
@@ -189,7 +220,8 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// lastPromptTokens includes everything (system prompt, tools, context files, history).
 	// We subtract estimated overhead so the threshold comparison is history-only.
 	lastPT, lastMC := l.sessions.GetLastPromptTokens(ctx, sessionKey)
-	adjustedLastPT := max(lastPT-l.estimateOverhead(history, lastPT, lastMC), 0)
+	overheadEstimate := l.estimateOverhead(history, lastPT, lastMC)
+	adjustedLastPT := max(lastPT-overheadEstimate, 0)
 	tokenEstimate := EstimateTokensWithCalibration(history, adjustedLastPT, lastMC)
 
 	// Resolve compaction threshold from config: token-only (no message count guard).
@@ -201,6 +233,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 	threshold := int(float64(l.contextWindow) * historyShare)
 	if tokenEstimate <= threshold {
+		l.logCompactionDecision(sessionKey, "skip", "under_threshold", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 		return
 	}
 
@@ -210,9 +243,12 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	muI, _ := l.summarizeMu.LoadOrStore(sessionKey, &sync.Mutex{})
 	sessionMu := muI.(*sync.Mutex)
 	if !sessionMu.TryLock() {
+		l.logCompactionDecision(sessionKey, "skip", "already_in_progress", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 		slog.Debug("summarization already in progress, skipping", "session", sessionKey)
 		return
 	}
+
+	l.logCompactionDecision(sessionKey, "trigger", "", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 
 	// Memory flush runs synchronously INSIDE the guard
 	// (so concurrent runs don't both trigger flush for the same compaction cycle).
@@ -234,7 +270,8 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 		// Re-check: history may have been truncated by a concurrent summarize
 		// that finished between our threshold check and acquiring the lock.
-		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
+		timeout := l.compactionTimeout()
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
 
 		history := l.sessions.GetHistory(sctx, sessionKey)
@@ -283,7 +320,19 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		prompt.WriteString(sb.String())
 
 		inTokens := l.estimateSummaryInputTokens(toSummarize)
-		slog.Info("compact_budget", "agent", l.id, "in_tokens", inTokens, "out_tokens", dynamicSummaryMax(inTokens))
+		slog.Info("compact_budget",
+			"path", "post-turn",
+			"agent", l.id,
+			"session", sessionKey,
+			"in_tokens", inTokens,
+			"out_tokens", dynamicSummaryMax(inTokens),
+			"context_window", l.contextWindow,
+			"threshold", threshold,
+			"token_estimate", tokenEstimate,
+			"max_history_share", historyShare,
+			"reserve_tokens_floor", l.resolveReserveTokens(),
+			"timeout_seconds", int(timeout/time.Second),
+		)
 		chatReq := providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt.String()}},
 			Model:    l.model,
@@ -330,6 +379,28 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		})
 		l.sessions.Save(sctx, sessionKey)
 	}()
+}
+
+func (l *Loop) logCompactionDecision(sessionKey, decision, skipReason string, tokenEstimate, threshold int, historyShare float64, lastPromptTokens, lastMessageCount, adjustedLastPromptTokens, overheadEstimate int) {
+	args := []any{
+		"path", "post-turn",
+		"agent", l.id,
+		"session", sessionKey,
+		"decision", decision,
+		"context_window", l.contextWindow,
+		"threshold", threshold,
+		"token_estimate", tokenEstimate,
+		"max_history_share", historyShare,
+		"reserve_tokens_floor", l.resolveReserveTokens(),
+		"last_prompt_tokens", lastPromptTokens,
+		"last_message_count", lastMessageCount,
+		"adjusted_last_prompt_tokens", adjustedLastPromptTokens,
+		"overhead_estimate", overheadEstimate,
+	}
+	if skipReason != "" {
+		args = append(args, "skip_reason", skipReason)
+	}
+	slog.Info("compaction_decision", args...)
 }
 
 // estimateOverhead derives the non-history token overhead (system prompt + tool definitions +

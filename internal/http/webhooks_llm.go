@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	// webhookLLMTimeout is the hard deadline for synchronous LLM invocations.
-	webhookLLMTimeout = 30 * time.Second
+	// webhookLLMTimeout is the default hard deadline for webhook LLM invocations
+	// (sync + admin test). Overridable per-handler via syncTimeout from config.
+	webhookLLMTimeout = 600 * time.Second
 
 	// webhookLLMResponseTruncate is the maximum bytes stored in the audit row response column.
 	webhookLLMResponseTruncate = 32 * 1024
@@ -100,8 +101,14 @@ type WebhookLLMHandler struct {
 	limiter     *webhookLimiter
 	lane        *scheduler.Lane
 	encKey      string // AES-256-GCM key for decrypting encrypted_secret at HMAC verify time
-	// syncTimeout overrides webhookLLMTimeout (30s) — set in tests only.
+	// syncTimeout overrides the webhookLLMTimeout default (600s); set from
+	// gateway.webhook_sync_timeout_sec config (and in tests). 0 → use default.
 	syncTimeout time.Duration
+	// stream controls whether sync + test webhook agent runs stream provider
+	// responses so the upstream can populate/serve its prompt cache. The response
+	// returned to the caller is unchanged (assembled JSON). Set from
+	// gateway.webhook_stream config via webhooks.ResolveStream (default true).
+	stream bool
 }
 
 // NewWebhookLLMHandler constructs a WebhookLLMHandler.
@@ -112,6 +119,8 @@ func NewWebhookLLMHandler(
 	webhooks store.WebhookStore,
 	limiter *webhookLimiter,
 	lane *scheduler.Lane,
+	syncTimeout time.Duration,
+	stream bool,
 ) *WebhookLLMHandler {
 	if lane == nil {
 		lane = scheduler.NewLane(webhookLaneName, webhookLaneDefaultConcurrency)
@@ -122,6 +131,8 @@ func NewWebhookLLMHandler(
 		webhooks:    webhooks,
 		limiter:     limiter,
 		lane:        lane,
+		syncTimeout: syncTimeout,
+		stream:      stream,
 	}
 }
 
@@ -297,7 +308,7 @@ func (h *WebhookLLMHandler) handleSync(
 		ChatID:            webhook.ID.String(),
 		RunID:             runID,
 		UserID:            req.UserID,
-		Stream:            false,
+		Stream:            h.stream,
 		ModelOverride:     req.Model,
 		ExtraSystemPrompt: extraSystemPrompt,
 		HistoryLimit:      0,
@@ -558,7 +569,7 @@ func (h *WebhookLLMHandler) RunTest(ctx context.Context, wh *store.WebhookData, 
 		Channel:       "webhook",
 		ChatID:        wh.ID.String(),
 		RunID:         runID,
-		Stream:        false,
+		Stream:        h.stream,
 		ModelOverride: model,
 		TraceName:     "webhook.llm.test",
 		TraceTags:     []string{"webhook", "test"},

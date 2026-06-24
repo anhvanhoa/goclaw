@@ -13,6 +13,7 @@ export interface ToolPolicyConfig {
     max_ms?: number;
   };
   toolCallPrefix?: string; // prefix to strip from model's tool call names
+  rate_limit_per_hour?: number; // per-agent tool calls/hour (0 = use global)
 }
 
 export interface SubagentsConfig {
@@ -28,6 +29,7 @@ export interface CompactionConfig {
   reserveTokensFloor?: number;
   maxHistoryShare?: number;
   keepLastMessages?: number;
+  timeoutSeconds?: number;
   memoryFlush?: {
     enabled?: boolean;
     softThresholdTokens?: number;

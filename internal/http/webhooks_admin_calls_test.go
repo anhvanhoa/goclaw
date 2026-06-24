@@ -52,6 +52,14 @@ func (s *adminCallStore) List(ctx context.Context, f store.WebhookCallListFilter
 	return out, nil
 }
 
+func (s *adminCallStore) Count(ctx context.Context, f store.WebhookCallListFilter) (int, error) {
+	rows, err := s.List(ctx, f)
+	if err != nil {
+		return 0, err
+	}
+	return len(rows), nil
+}
+
 func (s *adminCallStore) GetByID(ctx context.Context, id uuid.UUID) (*store.WebhookCallData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,6 +90,7 @@ func (s *adminCallStore) DeleteOlderThan(context.Context, uuid.UUID, time.Time) 
 	return 0, nil
 }
 func (s *adminCallStore) ReclaimStale(context.Context, time.Time) (int64, error) { return 0, nil }
+func (s *adminCallStore) Heartbeat(context.Context, uuid.UUID, string, time.Time) error { return nil }
 
 // ---- stub testers ----
 
@@ -141,12 +150,18 @@ func TestWebhookAdmin_ListCalls_Success(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var got []webhookCallResp
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	var body struct {
+		Items []webhookCallResp `json:"items"`
+		Total int               `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 calls for this webhook, got %d", len(got))
+	if len(body.Items) != 2 {
+		t.Fatalf("want 2 calls for this webhook, got %d", len(body.Items))
+	}
+	if body.Total != 2 {
+		t.Fatalf("want total 2, got %d", body.Total)
 	}
 }
 
@@ -166,10 +181,16 @@ func TestWebhookAdmin_ListCalls_StatusFilter(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var got []webhookCallResp
-	_ = json.Unmarshal(w.Body.Bytes(), &got)
-	if len(got) != 1 || got[0].Status != "failed" {
-		t.Fatalf("status filter failed: %+v", got)
+	var body struct {
+		Items []webhookCallResp `json:"items"`
+		Total int               `json:"total"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if len(body.Items) != 1 || body.Items[0].Status != "failed" {
+		t.Fatalf("status filter failed: %+v", body.Items)
+	}
+	if body.Total != 1 {
+		t.Fatalf("want total 1, got %d", body.Total)
 	}
 }
 

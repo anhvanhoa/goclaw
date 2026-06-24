@@ -251,6 +251,18 @@ func (c *Config) applyEnvOverrides() {
 			c.Skills.MaxUploadSizeMB = ClampSkillMaxUploadSizeMB(mb)
 		}
 	}
+	// Webhook agent-run timeouts (seconds). Bounds (default 600, cap 3600) are
+	// applied at consumption via webhooks.ResolveTimeoutSec.
+	if v := os.Getenv("GOCLAW_WEBHOOK_ASYNC_TIMEOUT_SEC"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			c.Gateway.WebhookAsyncTimeoutSec = sec
+		}
+	}
+	if v := os.Getenv("GOCLAW_WEBHOOK_SYNC_TIMEOUT_SEC"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			c.Gateway.WebhookSyncTimeoutSec = sec
+		}
+	}
 	envBoolPtr := func(key string, dst **bool) {
 		if v := os.Getenv(key); v != "" {
 			b := parseEnvBool(v)
@@ -262,6 +274,8 @@ func (c *Config) applyEnvOverrides() {
 			*dst = parseEnvBool(v)
 		}
 	}
+	// Webhook internal streaming toggle (default true; nil → on via webhooks.ResolveStream).
+	envBoolPtr("GOCLAW_WEBHOOK_STREAM", &c.Gateway.WebhookStream)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_ENABLED", &c.Skills.SlashCommands.Enabled)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_SUGGEST_NOT_FOUND", &c.Skills.SlashCommands.SuggestNotFound)
 	envBool("GOCLAW_SKILLS_SLASH_COMMANDS_PARTIAL_MATCHING", &c.Skills.SlashCommands.PartialMatching)
@@ -379,6 +393,9 @@ func (c *Config) applyEnvOverrides() {
 	if c.Tools.Browser.RemoteURL != "" {
 		c.Tools.Browser.Enabled = true
 	}
+
+	// Cron job execution
+	envStr("GOCLAW_CRON_JOB_TIMEOUT", &c.Cron.JobTimeout)
 }
 
 // Save writes the config to a JSON file.

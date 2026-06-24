@@ -28,6 +28,8 @@ type stubCallStore struct {
 	claimErr    error          // if non-nil, returned by ClaimNext
 	reclaimN    int64          // count returned by ReclaimStale
 	casLeaseErr error          // if non-nil, returned by UpdateStatusCAS
+	hbCount     int32 // số lần Heartbeat được gọi (atomic)
+	hbErr       error // nếu non-nil, Heartbeat trả về lỗi này
 }
 
 func newStubCallStore(initial *store.WebhookCallData) *stubCallStore {
@@ -94,11 +96,18 @@ func (s *stubCallStore) ClaimNext(_ context.Context, _ uuid.UUID, _ time.Time) (
 func (s *stubCallStore) List(_ context.Context, _ store.WebhookCallListFilter) ([]store.WebhookCallData, error) {
 	return nil, nil
 }
+func (s *stubCallStore) Count(_ context.Context, _ store.WebhookCallListFilter) (int, error) {
+	return 0, nil
+}
 func (s *stubCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Time) (int64, error) {
 	return 0, nil
 }
 func (s *stubCallStore) ReclaimStale(_ context.Context, _ time.Time) (int64, error) {
 	return s.reclaimN, nil
+}
+func (s *stubCallStore) Heartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	atomic.AddInt32(&s.hbCount, 1)
+	return s.hbErr
 }
 
 // stubWebhookStore returns a fixed webhook on GetByID.
@@ -118,6 +127,9 @@ func (s *stubWebhookStore) GetByHash(_ context.Context, _ string) (*store.Webhoo
 }
 func (s *stubWebhookStore) List(_ context.Context, _ store.WebhookListFilter) ([]store.WebhookData, error) {
 	return nil, nil
+}
+func (s *stubWebhookStore) Count(_ context.Context, _ store.WebhookListFilter) (int, error) {
+	return 0, nil
 }
 func (s *stubWebhookStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error { return nil }
 func (s *stubWebhookStore) RotateSecret(_ context.Context, _ uuid.UUID, _, _, _ string) error {
@@ -693,6 +705,52 @@ func TestSign(t *testing.T) {
 	}
 	if len(v1) != 64 {
 		t.Errorf("v1 hex length: got %d, want 64", len(v1))
+	}
+}
+
+// TestHeartbeatLoopRenews verifies the loop calls Heartbeat repeatedly and does NOT
+// cancel the run while the lease stays valid.
+func TestHeartbeatLoopRenews(t *testing.T) {
+	callStore := newStubCallStore(nil)
+	w := newTestWorker(callStore, &stubWebhookStore{})
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	stop := make(chan struct{})
+
+	go w.heartbeatLoop(context.Background(), uuid.New(), "lease-1", 5*time.Millisecond, stop, cancelRun)
+
+	time.Sleep(40 * time.Millisecond)
+	close(stop)
+	time.Sleep(10 * time.Millisecond)
+
+	if atomic.LoadInt32(&callStore.hbCount) < 3 {
+		t.Errorf("expected ≥3 heartbeats, got %d", atomic.LoadInt32(&callStore.hbCount))
+	}
+	if runCtx.Err() != nil {
+		t.Errorf("runCtx must NOT be cancelled while lease valid; err=%v", runCtx.Err())
+	}
+}
+
+// TestHeartbeatLoopCancelsOnLeaseLost verifies that when Heartbeat returns ErrLeaseExpired,
+// the loop cancels runCtx and returns.
+func TestHeartbeatLoopCancelsOnLeaseLost(t *testing.T) {
+	callStore := newStubCallStore(nil)
+	callStore.hbErr = store.ErrLeaseExpired // mất lease ngay tick đầu
+	w := newTestWorker(callStore, &stubWebhookStore{})
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	stop := make(chan struct{})
+	defer close(stop)
+
+	go w.heartbeatLoop(context.Background(), uuid.New(), "lease-1", 5*time.Millisecond, stop, cancelRun)
+
+	select {
+	case <-runCtx.Done():
+		// đúng — run bị hủy do mất lease
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("runCtx not cancelled after lease lost within 200ms")
 	}
 }
 

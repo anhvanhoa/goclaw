@@ -911,6 +911,9 @@ CREATE INDEX IF NOT EXISTS idx_custom_tools_agent ON custom_tools(agent_id) WHER
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_global_uq ON mcp_oauth_tokens (server_id, tenant_id) WHERE user_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_user_uq ON mcp_oauth_tokens (server_id, tenant_id, user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_server_tenant ON mcp_oauth_tokens (server_id, tenant_id);`,
+	// Version 51 → 52: add last_heartbeat_at to webhook_calls for lease heartbeat.
+	// Mirrors PG migration 000085. Idempotent-guarded via idempotentColumnMigration(51).
+	51: `ALTER TABLE webhook_calls ADD COLUMN last_heartbeat_at TEXT;`,
 }
 
 const addUsageEventAnalyticsTables = `
@@ -1509,6 +1512,8 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 		return "secure_cli_user_credentials", "host_scope", true
 	case 41:
 		return "secure_cli_binaries", "adapter_name", true
+	case 51:
+		return "webhook_calls", "last_heartbeat_at", true
 	default:
 		return "", "", false
 	}

@@ -95,9 +95,27 @@ Fields:
 
 ### List — `GET /v1/webhooks`
 
-Query params: `agent_id=<uuid>` (optional filter).
+Query params (all optional):
+- `agent_id=<uuid>` — filter by bound agent.
+- `q=<text>` — case-insensitive match on name, or prefix match on `secret_prefix`.
+- `include_revoked=true` — include revoked webhooks (default: excluded).
+- `limit` — page size (default 20, max 200).
+- `offset` — page offset (default 0).
 
-Returns array of webhook objects. `secret` and `hmac_signing_key` are **not** included.
+Returns a paginated envelope. `secret` and `hmac_signing_key` are **not** included.
+
+```json
+{
+  "items": [ /* webhook objects */ ],
+  "total": 42,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### List calls — `GET /v1/webhooks/{id}/calls`
+
+Delivery history for a webhook. Query params (all optional): `status` (`queued`|`running`|`done`|`failed`|`dead`), `limit` (default 20, max 200), `offset`. Returns the same `{items, total, limit, offset}` envelope.
 
 ### Get — `GET /v1/webhooks/{id}`
 
@@ -254,7 +272,28 @@ Triggers an agent with an input prompt. Available in all editions.
 }
 ```
 
-Sync mode times out at **30 seconds**. On timeout: `504 Gateway Timeout` with `webhook.llm_timeout`.
+Sync mode times out after the configured deadline (default **600s**). On timeout: `504 Gateway Timeout` with `webhook.llm_timeout`.
+
+#### Agent-run timeouts (configurable)
+
+Both webhook agent-run deadlines default to **600s** and are capped at **3600s**. Configure via `config.json` or environment variables (env overrides config):
+
+| Setting (config) | Env var | Applies to | Default |
+|------------------|---------|-----------|---------|
+| `gateway.webhook_sync_timeout_sec` | `GOCLAW_WEBHOOK_SYNC_TIMEOUT_SEC` | sync + admin test calls | 600 |
+| `gateway.webhook_async_timeout_sec` | `GOCLAW_WEBHOOK_ASYNC_TIMEOUT_SEC` | async worker runs | 600 |
+
+> Sync mode holds the HTTP connection open for the whole run — a value above an upstream proxy/load-balancer read timeout may be cut before the agent finishes. Async mode returns `202` immediately and runs in the background, so a longer deadline is safe.
+
+#### Prompt caching (internal streaming)
+
+Server-side webhook agent runs (sync, async, and admin test) stream provider responses internally by default. This lets OpenAI-compatible providers/routers populate and serve their prompt cache for the large, stable system+tools+history prefix — non-streaming requests are not cached by some routers, so webhook runs would otherwise pay full input-token price on every turn even with a stable session. The response returned to the caller is unchanged (the gateway assembles the streamed chunks into the same JSON/SSE payload).
+
+| Setting (config) | Env var | Applies to | Default |
+|------------------|---------|-----------|---------|
+| `gateway.webhook_stream` | `GOCLAW_WEBHOOK_STREAM` | sync + async + test webhook agent runs | `true` |
+
+> Set to `false` to restore non-streaming requests (e.g. for a provider that misbehaves when streaming). Caching for `cache_control`-style providers (Anthropic/DashScope) is unaffected by this flag.
 
 ### Async Response — 202 Accepted
 
