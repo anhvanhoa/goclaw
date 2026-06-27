@@ -344,6 +344,7 @@ func isWriteMethod(method string) bool {
 		protocol.MethodCronToggle,
 		protocol.MethodCronRun,
 		protocol.MethodSend,
+		protocol.MethodLLMComplete,
 		protocol.MethodAgentsFileSet,
 		protocol.MethodTeamsTaskApprove,
 		protocol.MethodTeamsTaskReject,
