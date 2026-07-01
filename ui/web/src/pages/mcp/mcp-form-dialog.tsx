@@ -16,17 +16,7 @@ import { isValidSlug } from "@/lib/slug";
 import { mcpFormSchema, type MCPFormData } from "@/schemas/mcp.schema";
 import { McpConnectionFields } from "./mcp-connection-fields";
 import { McpSettingsFields } from "./mcp-settings-fields";
-
-/** Split a string into shell-like tokens, treating commas and spaces outside quotes as delimiters. */
-function splitShellTokens(input: string): string[] {
-  const tokens: string[] = [];
-  const re = /"([^"]*)"|'([^']*)'|[^\s,]+/g;
-  let m;
-  while ((m = re.exec(input)) !== null) {
-    tokens.push(m[1] ?? m[2] ?? m[0]);
-  }
-  return tokens.filter(Boolean);
-}
+import { formatShellArgs, parseShellArgs } from "./mcp-args";
 
 interface MCPFormDialogProps {
   open: boolean;
@@ -56,6 +46,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
   const [createdServer, setCreatedServer] = useState<MCPServerData | null>(null);
 
   const form = useForm<MCPFormData>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(mcpFormSchema),
     mode: "onChange",
     defaultValues: {
@@ -102,7 +93,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
         displayName: server?.display_name ?? "",
         transport: (server?.transport as MCPFormData["transport"]) ?? "stdio",
         command: server?.command ?? "",
-        args: Array.isArray(server?.args) ? server.args.join(", ") : "",
+        args: Array.isArray(server?.args) ? formatShellArgs(server.args) : "",
         url: server?.url ?? "",
         headers: server?.headers ?? {},
         env: server?.env ?? {},
@@ -132,14 +123,14 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
     let resolvedCommand = command.trim();
 
     if (isStdio) {
-      const cmdTokens = splitShellTokens(resolvedCommand);
+      const cmdTokens = parseShellArgs(resolvedCommand);
       if (cmdTokens.length > 1) {
         resolvedCommand = cmdTokens[0]!;
         const extraArgs = cmdTokens.slice(1);
-        const userArgs = args.trim() ? splitShellTokens(args) : [];
+        const userArgs = args.trim() ? parseShellArgs(args) : [];
         parsedArgs = [...extraArgs, ...userArgs];
       } else if (args.trim()) {
-        parsedArgs = splitShellTokens(args);
+        parsedArgs = parseShellArgs(args);
       }
     }
 
@@ -296,6 +287,11 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
           <McpConnectionFields form={form} />
           <McpSettingsFields form={form} isEditing={!!server} />
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {Object.keys(form.formState.errors).length > 0 && !error && (
+            <p className="text-sm text-destructive">
+              {Object.values(form.formState.errors).map(e => e?.message).filter(Boolean).join(", ")}
+            </p>
+          )}
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -331,7 +327,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               {t("form.cancel")}
             </Button>
-            <Button onClick={handleSubmit} disabled={loading}>
+            <Button type="button" onClick={handleSubmit} disabled={loading}>
               {loading ? t("form.saving") : (server || createdServer) ? t("form.update") : t("form.create")}
             </Button>
           </div>

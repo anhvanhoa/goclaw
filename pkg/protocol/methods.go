@@ -85,6 +85,8 @@ const (
 
 	MethodQuotaUsage = "quota.usage"
 
+	MethodLLMComplete = "llm.complete"
+
 	MethodSend = "send"
 )
 

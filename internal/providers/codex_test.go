@@ -305,7 +305,7 @@ func TestCodexProviderChatStream(t *testing.T) {
 		events := []string{
 			`{"type":"response.output_text.delta","delta":"Hello"}`,
 			`{"type":"response.output_text.delta","delta":" world"}`,
-			`{"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
+			`{"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7,"input_tokens_details":{"cached_tokens":4}}}}`,
 		}
 
 		for _, e := range events {
@@ -343,6 +343,12 @@ func TestCodexProviderChatStream(t *testing.T) {
 	}
 	if result.Usage.TotalTokens != 7 {
 		t.Errorf("TotalTokens = %d, want 7", result.Usage.TotalTokens)
+	}
+	if result.Usage.CacheReadTokens != 4 {
+		t.Errorf("CacheReadTokens = %d, want 4", result.Usage.CacheReadTokens)
+	}
+	if !result.Usage.PromptTokensIncludeCachedSegments {
+		t.Error("PromptTokensIncludeCachedSegments = false, want true")
 	}
 }
 
@@ -1123,3 +1129,28 @@ func TestCodexBuildRequestBody_NilFunction_HandlesGracefully(t *testing.T) {
 	}
 }
 
+func TestCodexBuildRequestBodyPromptCacheControls(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
+
+	body := p.buildRequestBody(ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Hello"}},
+		Options: map[string]any{
+			OptPromptCacheKey:       "agent/session/provider",
+			OptPromptCacheRetention: "24h",
+		},
+	}, true)
+
+	if got := body["prompt_cache_key"]; got != "agent/session/provider" {
+		t.Fatalf("prompt_cache_key = %v, want agent/session/provider", got)
+	}
+	if got := body["prompt_cache_retention"]; got != "24h" {
+		t.Fatalf("prompt_cache_retention = %v, want 24h", got)
+	}
+}
+
+func TestCodexProviderCapabilitiesCacheControl(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
+	if !p.Capabilities().CacheControl {
+		t.Fatal("CodexProvider Capabilities().CacheControl = false, want true")
+	}
+}

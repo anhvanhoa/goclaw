@@ -346,7 +346,7 @@ func runGateway() {
 	_ = skillSearchTool // used via wireExtras → skillsLoader; kept for type clarity
 
 	// Register cron/heartbeat/session/message tools, aliases, allow-paths, store wiring.
-	heartbeatTool, hasMemory := wireExtraTools(pgStores, toolsReg, msgBus, workspace, dataDir, agentCfg, globalSkillsDir, builtinSkillsDir)
+	heartbeatTool, hasMemory := wireExtraTools(pgStores, toolsReg, msgBus, workspace, dataDir, agentCfg, globalSkillsDir, builtinSkillsDir, cfg.Cron.CommandEnabled)
 
 	// Load user-defined custom tools from DB and register them in the tool registry.
 	if pgStores.CustomTools != nil {
@@ -457,12 +457,12 @@ func runGateway() {
 			oauthRefresher = r
 		}
 		mcpOAuthH = httpapi.NewMCPOAuthHandler(httpapi.MCPOAuthHandlerDeps{
-			MCPStore:   pgStores.MCP,
-			OAuthStore: pgStores.MCPOAuthTokens,
-			Discoverer: mcpoauth.NewDiscoverer(safeHTTPClient),
-			FlowMgr:    mcpoauth.NewFlowManager(safeHTTPClient),
-			Refresher:  oauthRefresher,
-			EventBus:   msgBus,
+			MCPStore:    pgStores.MCP,
+			OAuthStore:  pgStores.MCPOAuthTokens,
+			Discoverer:  mcpoauth.NewDiscoverer(safeHTTPClient),
+			FlowMgr:     mcpoauth.NewFlowManager(safeHTTPClient),
+			Refresher:   oauthRefresher,
+			EventBus:    msgBus,
 			PublicURL:   cfg.Gateway.PublicURL,
 			Port:        cfg.Gateway.Port,
 			TenantStore: pgStores.Tenants,
@@ -519,7 +519,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry)
 
 	// Custom tools RPC methods (custom_tools.list/create/update/delete/toggle).
 	if pgStores.CustomTools != nil {

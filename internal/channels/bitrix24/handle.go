@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -117,8 +118,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// require_mention is true, reply to everything when false) or silently
 	// merge into the "direct" path. Recognise it up-front so the gate below
 	// can apply the right policy.
-	isOpenChannel := strings.EqualFold(evt.Params.MessageType, "L") ||
-		strings.EqualFold(evt.Params.ChatEntityType, "LINES")
+	isOpenChannel := isOpenChannelParams(&evt.Params)
 	// Force group routing for Open Channel so the existing mention-strip /
 	// readable-mention pipeline below runs, and so the session key includes
 	// the chat id instead of dumping every participant into the "direct"
@@ -144,23 +144,42 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// without an explicit mention, traffic is dropped so the bot doesn't
 	// spam the customer or interfere with operator handling.
 	if isOpenChannel {
-		if !c.isMentionedParams(&evt.Params) {
-			slog.Info("bitrix24 message: dropped OL message without mention",
-				"from_user_id", evt.Params.FromUserID,
-				"from_connector", evt.Params.FromIsConnector,
-				"dialog_id", evt.Params.DialogID,
-				"message_id", evt.Params.MessageID)
-			return
+		// Mention gate is now scoped per-connector: see shouldRequireMentionForOpenline
+		// for the policy (internal staff always gate; external customer gates only
+		// for group-style connectors like Zalo personal; 1-to-1 connectors reply
+		// to every customer message). Connector whitelist is overridable via
+		// BITRIX24_REQUIRE_MENTION_CONNECTORS env so adding e.g. a future Zalo group
+		// connector doesn't need a code change.
+		if shouldRequireMentionForOpenline(evt.Params.FromIsConnector, evt.Params.ChatEntityID) {
+			if !c.isMentionedParams(&evt.Params) {
+				slog.Info("bitrix24 message: dropped OL message without mention",
+					"from_user_id", evt.Params.FromUserID,
+					"from_connector", evt.Params.FromIsConnector,
+					"chat_entity_id", evt.Params.ChatEntityID,
+					"dialog_id", evt.Params.DialogID,
+					"message_id", evt.Params.MessageID)
+				return
+			}
 		}
 	}
 	if isGroup {
+		// Mention DROP CHECK is scoped to native group chats (CRM deal/task,
+		// plain groups) only. Open Channel sessions own their mention policy
+		// via shouldRequireMentionForOpenline above — re-applying the channel-
+		// level RequireMention flag here would silently drop, e.g., every
+		// Facebook Messenger customer turn (whose connector isn't in the
+		// require-mention whitelist) even though the upstream gate let it
+		// through. Text processing below (mention strip + readable rewrite)
+		// stays unconditional so Openline staff messages with bot BBCode tags
+		// still get cleaned up.
+		//
 		// Authority-ordered fallback: structured MENTIONED_LIST → raw
 		// MESSAGE_ORIGINAL → stripped MESSAGE. In group chats Bitrix24 strips
 		// the @mention from MESSAGE before sending the webhook, so checking
 		// MESSAGE alone misses every group mention. See
 		// plans/bitrix24-mcp-refactor/reports/retrospective.md §2 for context.
 		mentioned := c.isMentionedParams(&evt.Params)
-		if c.RequireMention() && !mentioned {
+		if !isOpenChannel && c.RequireMention() && !mentioned {
 			slog.Info("bitrix24 message: dropped missing mention",
 				"from_user_id", evt.Params.FromUserID,
 				"dialog_id", evt.Params.DialogID,
@@ -354,7 +373,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the MCP server's tools, which is strictly better UX than the channel
 	// denying the message. The typed errors let tests assert behavior
 	// without string matching.
-	if err := c.provisionIfMissing(ctx, senderID, evt.Auth); err != nil {
+	if err := c.provisionIfMissing(ctx, senderID, evt.Params.FromIsConnector, evt.Auth); err != nil {
 		switch {
 		case errors.Is(err, ErrProvisionDisabled),
 			errors.Is(err, ErrProvisionSkippedOpenChannel),
@@ -382,6 +401,22 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the agent with their MIME type preserved. Best-effort: failures are logged
 	// inside downloadEventFiles and never block the text from reaching the agent.
 	mediaFiles := c.downloadEventFiles(ctx, c.BotID(), evt.Params.Files)
+	// Prepend <media:*> tags so the LLM sees the attachment alongside the body
+	// text. The agent loop's enrichInputMedia REPLACES tags it finds (it does
+	// NOT insert new ones), so without this step a Bitrix-borne PDF / audio
+	// arrives as bare text — the LLM never realizes an attachment exists and
+	// degrades to "no file attached" or hallucinates a CRM document. Match
+	// the Telegram / Slack / Discord pattern (shared media.BuildMediaTags) so
+	// the tag shape stays uniform across channels.
+	if len(mediaFiles) > 0 {
+		if tags := media.BuildMediaTags(mediaFilesToInfos(mediaFiles)); tags != "" {
+			if text == "" {
+				text = tags
+			} else {
+				text = tags + "\n" + text
+			}
+		}
+	}
 	slog.Info("bitrix24 message: publish to bus",
 		"sender_id", senderID,
 		"chat_id", chatID,
@@ -396,6 +431,14 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 // chat. Failure is non-fatal — the agent will still respond to the user's
 // first real message.
 func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
+	// Open Channel sessions are customer-facing. Keep join events silent so
+	// adding the bot does not push an unsolicited greeting to the customer.
+	if isOpenChannelParams(&evt.Params) {
+		slog.Debug("bitrix24: welcome message skipped for open channel",
+			"dialog_id", evt.Params.DialogID)
+		return
+	}
+
 	client := c.Client()
 	botID := c.BotID()
 	if client == nil || botID <= 0 {
@@ -413,6 +456,11 @@ func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
 		slog.Warn("bitrix24: welcome message send failed",
 			"dialog_id", evt.Params.DialogID, "err", err)
 	}
+}
+
+func isOpenChannelParams(p *EventParams) bool {
+	return p != nil && (strings.EqualFold(p.MessageType, "L") ||
+		strings.EqualFold(p.ChatEntityType, "LINES"))
 }
 
 // isMentionedParams checks all three sources Bitrix24 may use to convey a
